@@ -180,9 +180,65 @@
             button { padding: 8px 10px; min-width: 80px; }
         }
 
+        /* Access Control */
+        #auth-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #1e1e1e;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        #auth-box {
+            background: #2b2b2b;
+            padding: 40px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid #333;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        #auth-pass {
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #444;
+            background: #333;
+            color: white;
+            margin-bottom: 15px;
+            font-size: 16px;
+            width: 200px;
+        }
+        #auth-btn {
+            background: #007acc;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        #auth-error {
+            color: #ff4444;
+            margin-top: 10px;
+            font-size: 12px;
+            display: none;
+        }
+
     </style>
 </head>
 <body>
+
+    <div id="auth-overlay">
+        <div id="auth-box">
+            <h2 style="color:white; margin-top:0;">Access Restricted</h2>
+            <p style="color:#aaa; font-size:14px;">Please enter the access code to view this demo.</p>
+            <input type="password" id="auth-pass" placeholder="Enter password" />
+            <br>
+            <button id="auth-btn" onclick="checkAuth()">Unlock</button>
+            <div id="auth-error">Incorrect password</div>
+        </div>
+    </div>
 
     <!-- Top Controls -->
     <div id="controls-bar">
@@ -240,6 +296,32 @@
     </div>
 
     <script>
+        // --- Access Control ---
+        const DEMO_PASS = "steamer2024"; // Simple client-side gate
+        
+        function checkAuth() {
+            const input = document.getElementById('auth-pass');
+            const overlay = document.getElementById('auth-overlay');
+            const error = document.getElementById('auth-error');
+            
+            if (input.value === DEMO_PASS) {
+                overlay.style.display = 'none';
+                localStorage.setItem('steamer_auth', 'true');
+            } else {
+                error.style.display = 'block';
+            }
+        }
+
+        // Check persistent auth
+        if (localStorage.getItem('steamer_auth') === 'true') {
+            document.getElementById('auth-overlay').style.display = 'none';
+        }
+
+        // Enter key support
+        document.getElementById('auth-pass').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') checkAuth();
+        });
+
         // --- Image Canvas Setup ---
         const mainCanvas = document.getElementById('interaction-canvas');
         const mainCtx = mainCanvas.getContext('2d');
