@@ -1,0 +1,8 @@
+# Ignore everything in the root
+/*
+
+# Whitelist the Steamer project folder
+!/SteamerInteractiveGUI
+
+# Whitelist this file
+!/.gitignore
