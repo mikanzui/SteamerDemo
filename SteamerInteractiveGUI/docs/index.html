@@ -180,63 +180,65 @@
             button { padding: 8px 10px; min-width: 80px; }
         }
 
-        /* Access Control */
-        #auth-overlay {
+        /* Login Overlay */
+        #login-overlay {
             position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: #1e1e1e;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #1e1e1e;
             z-index: 9999;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
         }
-        #auth-box {
-            background: #2b2b2b;
-            padding: 40px;
-            border-radius: 8px;
-            text-align: center;
+
+        #login-box {
+            background-color: #252526;
+            padding: 30px;
             border: 1px solid #333;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            border-radius: 5px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
-        #auth-pass {
-            padding: 10px;
-            border-radius: 4px;
-            border: 1px solid #444;
-            background: #333;
+
+        #login-input {
+            padding: 8px;
+            margin: 10px 0;
+            background-color: #333;
+            border: 1px solid #555;
             color: white;
-            margin-bottom: 15px;
-            font-size: 16px;
-            width: 200px;
+            border-radius: 3px;
+            outline: none;
         }
-        #auth-btn {
-            background: #007acc;
+
+        #login-btn {
+            background-color: #007acc;
             color: white;
-            padding: 10px 20px;
             border: none;
-            border-radius: 4px;
+            padding: 8px 15px;
             cursor: pointer;
-            font-size: 14px;
+            border-radius: 3px;
+            font-weight: bold;
         }
-        #auth-error {
-            color: #ff4444;
-            margin-top: 10px;
-            font-size: 12px;
-            display: none;
-        }
+        
+        #login-btn:hover { background-color: #005999; }
 
     </style>
 </head>
 <body>
 
-    <div id="auth-overlay">
-        <div id="auth-box">
-            <h2 style="color:white; margin-top:0;">Access Restricted</h2>
-            <p style="color:#aaa; font-size:14px;">Please enter the access code to view this demo.</p>
-            <input type="password" id="auth-pass" placeholder="Enter password" />
+    <!-- Login Overlay -->
+    <div id="login-overlay">
+        <div id="login-box">
+            <h2 style="margin-top: 0;">Restricted Access</h2>
+            <p style="color: #ccc; font-size: 14px;">Enter password to view demo</p>
+            <input type="password" id="login-input" placeholder="Password">
             <br>
-            <button id="auth-btn" onclick="checkAuth()">Unlock</button>
-            <div id="auth-error">Incorrect password</div>
+            <button id="login-btn" onclick="checkPassword()">Enter</button>
+            <p id="login-error" style="color: #ff6b6b; font-size: 12px; margin-top: 10px; display: none;">Incorrect password</p>
         </div>
     </div>
 
@@ -296,30 +298,24 @@
     </div>
 
     <script>
-        // --- Access Control ---
-        const DEMO_PASS = "steamer2024"; // Simple client-side gate
-        
-        function checkAuth() {
-            const input = document.getElementById('auth-pass');
-            const overlay = document.getElementById('auth-overlay');
-            const error = document.getElementById('auth-error');
+        // --- Password Protection ---
+        function checkPassword() {
+            const input = document.getElementById('login-input');
+            const overlay = document.getElementById('login-overlay');
+            const error = document.getElementById('login-error');
             
-            if (input.value === DEMO_PASS) {
+            // Simple check
+            if (input.value === 'steamer2024') {
                 overlay.style.display = 'none';
-                localStorage.setItem('steamer_auth', 'true');
             } else {
                 error.style.display = 'block';
+                input.value = '';
+                input.focus();
             }
         }
 
-        // Check persistent auth
-        if (localStorage.getItem('steamer_auth') === 'true') {
-            document.getElementById('auth-overlay').style.display = 'none';
-        }
-
-        // Enter key support
-        document.getElementById('auth-pass').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') checkAuth();
+        document.getElementById('login-input').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') checkPassword();
         });
 
         // --- Image Canvas Setup ---
