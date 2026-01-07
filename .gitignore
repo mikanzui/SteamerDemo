@@ -4,5 +4,8 @@
 # Whitelist the Steamer project folder
 !/SteamerInteractiveGUI
 
+# Whitelist the docs folder for GitHub Pages
+!/docs
+
 # Whitelist this file
 !/.gitignore

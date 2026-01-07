@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Steamer Interactive GUI</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1e1e1e;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #eeeeee;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Top Control Bar */
+        #controls-bar {
+            background-color: #2b2b2b;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-bottom: 1px solid #333;
+            flex-shrink: 0;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            margin: 0 10px;
+        }
+
+        .group-label {
+            font-size: 10px;
+            color: #aaaaaa;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .row-frame {
+            display: flex;
+            align-items: center;
+        }
+
+        button {
+            background-color: #333333;
+            color: white;
+            border: none;
+            padding: 6px 15px;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-right: 5px;
+            min-width: 100px;
+            border-radius: 2px;
+        }
+
+        button:active {
+            background-color: #555555;
+        }
+
+        .separator {
+            width: 2px;
+            background-color: #555555;
+            height: 40px;
+            margin: 0 20px;
+        }
+
+        .led-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #404040;
+            border: 1px solid #555555;
+            margin-left: 5px;
+        }
+
+        .text-status {
+            font-size: 12px;
+            font-weight: bold;
+            color: #555555;
+            margin-left: 5px;
+            width: 80px;
+            text-align: center;
+        }
+
+        /* Main Content split */
+        #main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            flex-direction: row; /* Default desktop */
+        }
+
+        #image-area {
+            flex: 1;
+            background-color: #e6e6e6;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #interaction-canvas {
+            max-width: 100%;
+            max-height: 100%;
+            touch-action: none; 
+            cursor: pointer;
+        }
+
+        #guide-label {
+            margin-top: 10px;
+            color: #333333;
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            pointer-events: none;
+        }
+
+        /* Sidebar */
+        #sidebar {
+            width: 300px;
+            background-color: #252526;
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid #333;
+            flex-shrink: 0;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            padding: 20px 10px 0 10px; 
+        }
+
+        .sidebar-sub {
+            color: #aaaaaa;
+            font-size: 12px;
+            padding: 5px 10px 10px 10px;
+        }
+
+        #flow-canvas {
+            width: 280px;
+            height: 450px;
+            margin: 0 10px;
+        }
+
+        /* Responsive Layout for Mobile */
+        @media (max-width: 768px) {
+            #main-content {
+                flex-direction: column;
+            }
+            #sidebar {
+                width: 100%;
+                height: 300px; /* Partial height on mobile */
+                border-left: none;
+                border-top: 1px solid #333;
+            }
+            #flow-canvas {
+                width: 100%; /* Stretch */
+            }
+            #controls-bar {
+                flex-wrap: wrap; 
+            }
+            .separator { display: none; }
+            .control-group { margin-bottom: 10px; }
+            button { padding: 8px 10px; min-width: 80px; }
+        }
+
+        /* Login Overlay */
+        #login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #1e1e1e;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #login-box {
+            background-color: #252526;
+            padding: 30px;
+            border: 1px solid #333;
+            border-radius: 5px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        #login-input {
+            padding: 8px;
+            margin: 10px 0;
+            background-color: #333;
+            border: 1px solid #555;
+            color: white;
+            border-radius: 3px;
+            outline: none;
+        }
+
+        #login-btn {
+            background-color: #007acc;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            cursor: pointer;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        
+        #login-btn:hover { background-color: #005999; }
+
+    </style>
+</head>
+<body>
+
+    <!-- Login Overlay -->
+    <div id="login-overlay">
+        <div id="login-box">
+            <h2 style="margin-top: 0;">Restricted Access</h2>
+            <p style="color: #ccc; font-size: 14px;">Enter password to view demo</p>
+            <input type="password" id="login-input" placeholder="Password">
+            <br>
+            <button id="login-btn" onclick="checkPassword()">Enter</button>
+            <p id="login-error" style="color: #ff6b6b; font-size: 12px; margin-top: 10px; display: none;">Incorrect password</p>
+        </div>
+    </div>
+
+    <!-- Top Controls -->
+    <div id="controls-bar">
+        <!-- Power Group -->
+        <div class="control-group">
+            <span class="group-label">MAIN POWER</span>
+            <div class="row-frame">
+                <button onclick="triggerAction('Power')">POWER</button>
+                <div id="led-power" class="led-indicator"></div>
+            </div>
+        </div>
+
+        <div class="separator"></div>
+
+        <!-- Boost Group -->
+        <div class="control-group">
+            <span class="group-label">INTENSITY</span>
+            <div class="row-frame">
+                <button onclick="triggerAction('Boost')">BOOST</button>
+                <div id="led-boost" class="led-indicator"></div>
+            </div>
+        </div>
+
+        <div class="separator"></div>
+
+        <!-- Hold Group -->
+        <div class="control-group">
+            <span class="group-label">OPERATION</span>
+            <div class="row-frame">
+                <button 
+                    onmousedown="startHold()" 
+                    onmouseup="stopHold()" 
+                    ontouchstart="startHold(event)" 
+                    ontouchend="stopHold(event)"
+                    style="width: 140px;">HOLD FOR STEAM</button>
+                <span id="text-status" class="text-status">STANDBY</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="main-content">
+        <!-- Center Image Area -->
+        <div id="image-area">
+            <canvas id="interaction-canvas"></canvas>
+            <div id="guide-label">INTERACTIVE MODE: Click the buttons on the product image (Main or Side view) to operate.</div>
+        </div>
+
+        <!-- Right Sidebar Info -->
+        <div id="sidebar">
+            <div class="sidebar-header">State Overview</div>
+            <div class="sidebar-sub">Logic Decision Tree:</div>
+            <canvas id="flow-canvas" width="280" height="450"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // --- Password Protection ---
+        function checkPassword() {
+            const input = document.getElementById('login-input');
+            const overlay = document.getElementById('login-overlay');
+            const error = document.getElementById('login-error');
+            
+            // Simple check
+            if (input.value === 'steamer2024') {
+                overlay.style.display = 'none';
+            } else {
+                error.style.display = 'block';
+                input.value = '';
+                input.focus();
+            }
+        }
+
+        document.getElementById('login-input').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') checkPassword();
+        });
+
+        // --- Image Canvas Setup ---
+        const mainCanvas = document.getElementById('interaction-canvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        
+        const originalWidth = 1627;
+        const originalHeight = 882;
+        
+        const points = {
+            "Power": { x: 365, y: 292, r: 25 },
+            "Boost": { x: 366, y: 337, r: 25 },
+            "Hold":  { x: 777, y: 364, r: 35 }, 
+            "Steam": { x: 1385, y: 173 },
+            "Power_Side": { x: 1051, y: 291, r: 25 },
+            "Boost_Side": { x: 1051, y: 341, r: 25 }
+        };
+
+        const colors = {
+            "Power": "rgba(0, 255, 0, 1.0)",
+            "Boost": "rgba(255, 165, 0, 1.0)",
+            "Steam": "rgba(0, 150, 255, 1.0)"
+        };
+
+        // --- State ---
+        let state = {
+            powerOn: false,
+            mode: 1, 
+            holdActive: false
+        };
+
+        // --- Load Assets ---
+        const img = new Image();
+        img.src = 'steamer.png';
+        img.onload = () => {
+            resizeMainCanvas();
+            drawMain();
+        };
+
+        // --- Init Flowchart ---
+        const flowCanvas = document.getElementById('flow-canvas');
+        const flowCtx = flowCanvas.getContext('2d');
+        // Initial drawing of flowchart
+        drawFlowchart();
+
+
+        // --- Interaction Handlers ---
+
+        function triggerAction(name) {
+            if (name === 'Power' || name === 'Power_Side') {
+                state.powerOn = !state.powerOn;
+                if (state.powerOn) state.mode = 1;
+                else { state.mode = 1; state.holdActive = false; }
+            } else if (name === 'Boost' || name === 'Boost_Side') {
+                if (state.powerOn) {
+                    state.mode = (state.mode === 1) ? 2 : 1;
+                }
+            }
+            refreshUI();
+        }
+
+        function startHold(e) {
+            if (e) e.preventDefault(); // prevent touch scroll
+            if (state.powerOn) {
+                state.holdActive = true;
+                refreshUI();
+            }
+        }
+        
+        function stopHold(e) {
+            state.holdActive = false;
+            refreshUI();
+        }
+
+        function refreshUI() {
+            drawMain();
+            updateControls();
+            drawFlowchart(); // Redraw flowchart with highlights
+        }
+
+        // --- Control Panel Updates ---
+        const ledPower = document.getElementById('led-power');
+        const ledBoost = document.getElementById('led-boost');
+        const textStatus = document.getElementById('text-status');
+
+        function updateControls() {
+            // Power LED
+            ledPower.style.backgroundColor = state.powerOn ? '#00ff00' : '#404040';
+            
+            // Boost LED
+            const boostActive = state.powerOn && (state.mode === 2);
+            ledBoost.style.backgroundColor = boostActive ? '#d18c02' : '#404040';
+
+            // Status Text
+            if (state.powerOn) {
+                if (state.holdActive) {
+                    textStatus.textContent = "STEAMING";
+                    textStatus.style.color = "#00aaaa";
+                } else {
+                    textStatus.textContent = "READY";
+                    textStatus.style.color = "#00ff00";
+                }
+            } else {
+                textStatus.textContent = "STANDBY";
+                textStatus.style.color = "#555555";
+            }
+        }
+
+        // --- Main Canvas Interaction ---
+
+        function handleTap(clientX, clientY) {
+            const rect = mainCanvas.getBoundingClientRect();
+            const scale = mainCanvas.width / originalWidth;
+            const rawX = (clientX - rect.left) / scale;
+            const rawY = (clientY - rect.top) / scale;
+
+            for (const [name, p] of Object.entries(points)) {
+                if (p.r) { 
+                    const dist = Math.sqrt(Math.pow(rawX - p.x, 2) + Math.pow(rawY - p.y, 2));
+                    if (dist <= p.r * 1.5) { 
+                        if (name === 'Hold') {
+                            // Touch hold handled via listeners, click acts as momentary?
+                            // For simplicity on tap-only interface, maybe tap toggle?
+                            // But usually users want press-hold. 
+                            // This handler is for CLICK.
+                            // If user clicks Hold button on image, maybe blink? or do nothing (rely on press)
+                        } else {
+                            triggerAction(name);
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Mouse/Touch for Image Canvas
+        function checkHoldHit(clientX, clientY) {
+             const rect = mainCanvas.getBoundingClientRect();
+             const scale = mainCanvas.width / originalWidth;
+             const rawX = (clientX - rect.left) / scale;
+             const rawY = (clientY - rect.top) / scale;
+             const p = points['Hold'];
+             const dist = Math.sqrt(Math.pow(rawX - p.x, 2) + Math.pow(rawY - p.y, 2));
+             return (dist <= p.r * 1.5);
+        }
+
+        mainCanvas.addEventListener('mousedown', (e) => {
+            if (checkHoldHit(e.clientX, e.clientY)) startHold();
+        });
+        window.addEventListener('mouseup', () => { if(state.holdActive) stopHold(); });
+
+        mainCanvas.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            if (checkHoldHit(touch.clientX, touch.clientY)) startHold(e);
+        }, {passive: false});
+        window.addEventListener('touchend', () => { if(state.holdActive) stopHold(); });
+
+        mainCanvas.addEventListener('click', (e) => {
+            if (!state.holdActive) {
+                if (!checkHoldHit(e.clientX, e.clientY)) {
+                    handleTap(e.clientX, e.clientY);
+                }
+            }
+        });
+
+
+        // --- Main Canvas Drawing ---
+
+        function drawMain() {
+            mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+            
+            // 1. Base Image
+            mainCtx.globalCompositeOperation = 'source-over';
+            mainCtx.drawImage(img, 0, 0, mainCanvas.width, mainCanvas.height);
+
+            if (!state.powerOn) return;
+
+            // 2. Offscreen Light Layer
+            const lightCanvas = document.createElement('canvas');
+            lightCanvas.width = mainCanvas.width;
+            lightCanvas.height = mainCanvas.height;
+            const lCtx = lightCanvas.getContext('2d');
+            
+            lCtx.fillStyle = 'white';
+            lCtx.fillRect(0,0, lightCanvas.width, lightCanvas.height);
+            
+            const scale = mainCanvas.width / originalWidth;
+
+            // Draw Lights
+            const activeLights = [];
+            activeLights.push({ ...points.Power, col: colors.Power });
+            activeLights.push({ ...points.Power_Side, col: colors.Power });
+            
+            if (state.mode === 2) {
+                activeLights.push({ ...points.Boost, col: colors.Boost });
+                activeLights.push({ ...points.Boost_Side, col: colors.Boost });
+            }
+
+            activeLights.forEach(l => {
+                lCtx.beginPath();
+                lCtx.fillStyle = l.col;
+                lCtx.arc(l.x * scale, l.y * scale, l.r * scale, 0, Math.PI * 2);
+                lCtx.fill();
+            });
+
+            // Steam
+            if (state.holdActive) {
+                const sx = points.Steam.x * scale;
+                const sy = points.Steam.y * scale;
+                const col = colors.Steam;
+                const isBoost = (state.mode === 2);
+                drawSteamCloud(lCtx, sx, sy, col, isBoost, scale);
+            }
+
+            // Blur & Multiply
+            mainCtx.filter = 'blur(5px)'; 
+            mainCtx.globalCompositeOperation = 'multiply';
+            mainCtx.drawImage(lightCanvas, 0, 0);
+            
+            // Reset
+            mainCtx.filter = 'none';
+            mainCtx.globalCompositeOperation = 'source-over';
+        }
+
+        function drawSteamCloud(ctx, x, y, color, isBoost, scaleBase) { 
+            ctx.fillStyle = color;
+            ctx.strokeStyle = color;
+            const boostScale = isBoost ? 1.4 : 1.0;
+            const finalScale = scaleBase * boostScale;
+            
+            ctx.beginPath(); ctx.ellipse(x, y, 60 * finalScale, 30 * finalScale, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(x - 40 * finalScale, y, 40 * finalScale, 40 * finalScale, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(x + 40 * finalScale, y, 40 * finalScale, 30 * finalScale, 0, 0, Math.PI * 2); ctx.fill();
+            
+            if (isBoost) {
+                ctx.beginPath(); ctx.ellipse(x - 20 * scaleBase, y - 50 * finalScale, 50 * finalScale, 40 * finalScale, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(x - 20 * scaleBase, y - 70 * finalScale, 80 * finalScale, 20 * finalScale, 0, 0, Math.PI * 2); ctx.fill();
+            }
+
+            const lineWidth = (isBoost ? 10 : 6) * scaleBase;
+            ctx.lineWidth = lineWidth;
+            const width = (isBoost ? 180 : 120) * scaleBase;
+            
+            ctx.beginPath(); ctx.moveTo(x - width/2, y); ctx.lineTo(x + width/2, y); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(x - width/2 + 10*scaleBase, y - 15*scaleBase); ctx.lineTo(x + width/2 - 10*scaleBase, y - 15*scaleBase); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(x - width/2 + 10*scaleBase, y + 15*scaleBase); ctx.lineTo(x + width/2 - 10*scaleBase, y + 15*scaleBase); ctx.stroke();
+            
+            if (isBoost) {
+                ctx.beginPath(); ctx.moveTo(x - width/2 + 30*scaleBase, y - 30*scaleBase); ctx.lineTo(x + width/2 - 30*scaleBase, y - 30*scaleBase); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(x - width/2 + 30*scaleBase, y + 30*scaleBase); ctx.lineTo(x + width/2 - 30*scaleBase, y + 30*scaleBase); ctx.stroke();
+            }
+        }
+
+        // --- Flowchart Drawing ---
+
+        function drawFlowchart() {
+            const w = flowCanvas.width;
+            const h = flowCanvas.height;
+            flowCtx.clearRect(0,0,w,h);
+            
+            const cx = w / 2;
+            
+            // Helper funcs
+            function drawBox(x, y, bw, bh, text, tag) {
+                // Determine style based on state
+                let fill = "#333333";
+                let stroke = "#555555";
+                let textCol = "#aaaaaa";
+                let lineWidth = 1;
+
+                // Active Check
+                let isActive = false;
+                if (state.powerOn) {
+                    if (!state.holdActive) {
+                         if (state.mode === 1 && tag === 'normal') { isActive = true; fill = "#00aa00"; textCol="black"; }
+                         else if (state.mode === 2 && tag === 'boost') { isActive = true; fill = "#d18c02"; textCol="black"; }
+                         else if (tag === 'normal' || tag === 'boost') { /* inactive logic nodes */ }
+                         else if (tag === 'off') { /* off is inactive */ }
+                    } else {
+                         // Steaming
+                         if (state.mode === 1 && tag === 'steam_norm') { isActive = true; fill = "#00aaaa"; textCol="black"; }
+                         else if (state.mode === 2 && tag === 'steam_boost') { isActive = true; fill = "#00aaaa"; textCol="black"; }
+                    }
+                } else {
+                    if (tag === 'off') { isActive = true; fill = "#555555"; textCol="white"; }
+                }
+
+                if (isActive) {
+                    stroke = "#ffffff";
+                    lineWidth = 2;
+                }
+
+                // Draw Rect
+                flowCtx.fillStyle = fill;
+                flowCtx.strokeStyle = stroke;
+                flowCtx.lineWidth = lineWidth;
+                flowCtx.beginPath();
+                flowCtx.rect(x - bw/2, y - bh/2, bw, bh);
+                flowCtx.fill();
+                flowCtx.stroke();
+                
+                // Draw Text
+                flowCtx.fillStyle = textCol;
+                flowCtx.font = "bold 11px Segoe UI";
+                flowCtx.textAlign = "center";
+                flowCtx.textBaseline = "middle";
+                
+                const lines = text.split('\n');
+                const lineHeight = 14;
+                const totalH = lines.length * lineHeight;
+                let startY = y - (totalH/2) + (lineHeight/2);
+                
+                lines.forEach((line, i) => {
+                    flowCtx.fillText(line, x, startY + (i*lineHeight));
+                });
+                
+                return { x, y, bw, bh };
+            }
+
+            function drawArrow(x1, y1, x2, y2, double=false) {
+                flowCtx.strokeStyle = "#666666";
+                flowCtx.lineWidth = 1;
+                flowCtx.beginPath();
+                flowCtx.moveTo(x1, y1);
+                flowCtx.lineTo(x2, y2);
+                flowCtx.stroke();
+                
+                // Arrowhead
+                drawHead(x1, y1, x2, y2);
+                if (double) drawHead(x2, y2, x1, y1);
+            }
+
+            function drawHead(fromX, fromY, toX, toY) {
+                const headLen = 8;
+                const dx = toX - fromX;
+                const dy = toY - fromY;
+                const angle = Math.atan2(dy, dx);
+                flowCtx.beginPath();
+                flowCtx.moveTo(toX, toY);
+                flowCtx.lineTo(toX - headLen * Math.cos(angle - Math.PI / 6), toY - headLen * Math.sin(angle - Math.PI / 6));
+                flowCtx.lineTo(toX - headLen * Math.cos(angle + Math.PI / 6), toY - headLen * Math.sin(angle + Math.PI / 6));
+                flowCtx.lineTo(toX, toY);
+                flowCtx.fillStyle = "#666666";
+                flowCtx.fill();
+            }
+
+            function drawLabel(x, y, txt) {
+                flowCtx.fillStyle = "#888888";
+                flowCtx.font = "italic 10px Segoe UI";
+                flowCtx.fillText(txt, x, y);
+            }
+
+            // --- Nodes Layout (Scaled for 280px width) ---
+            // Desktop code had cx=150 (300px width). We have 280px, so cx=140.
+            
+            // Level 1: OFF
+            drawBox(cx, 40, 80, 30, "OFF", "off");
+            
+            // Level 2: ON
+            const norm_x = 70;
+            const boost_x = 210;
+            const l2_y = 130;
+            
+            drawBox(norm_x, l2_y, 80, 40, "ON\n(Normal)", "normal");
+            drawBox(boost_x, l2_y, 80, 40, "ON\n(Boost)", "boost");
+            
+            // Level 3: Steam
+            const l3_y = 250;
+            drawBox(norm_x, l3_y, 80, 40, "STEAM\n(Normal)", "steam_norm");
+            drawBox(boost_x, l3_y, 80, 40, "STEAM\n(Boost)", "steam_boost");
+
+            // --- Lines ---
+            // Power (Off -> Norm)
+            drawArrow(cx, 55, norm_x, 110); 
+            drawLabel((cx+norm_x)/2, (55+110)/2, "Power");
+
+            // Boost Toggle (Double Arrow)
+            drawArrow(norm_x+40, l2_y, boost_x-40, l2_y, true);
+            drawLabel(cx, l2_y-10, "Boost");
+
+            // Hold (Norm -> Steam)
+            drawArrow(norm_x, l2_y+20, norm_x, l3_y-20);
+            drawLabel(norm_x+10, (l2_y+l3_y)/2, "Hold");
+
+            // Hold (Boost -> Steam)
+            drawArrow(boost_x, l2_y+20, boost_x, l3_y-20);
+            drawLabel(boost_x+10, (l2_y+l3_y)/2, "Hold");
+        }
+
+        // --- Resizing ---
+        function resizeMainCanvas() {
+            const container = document.getElementById('image-area');
+            const cw = container.clientWidth;
+            const ch = container.clientHeight;
+            
+            const ratio = originalWidth / originalHeight;
+            let newW = cw;
+            let newH = cw / ratio;
+            
+            if (newH > ch) {
+                newH = ch;
+                newW = ch * ratio;
+            }
+            
+            mainCanvas.width = newW;
+            mainCanvas.height = newH;
+            drawMain();
+        }
+
+        window.addEventListener('resize', () => { resizeMainCanvas(); drawFlowchart(); });
+
+    </script>
+</body>
+</html>
