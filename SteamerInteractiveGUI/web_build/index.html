@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Steamer Interactive Demo</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1e1e1e;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #eeeeee;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #app-container {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+        }
+
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            /* Prevent touch actions like scrolling when interacting with canvas */
+            touch-action: none; 
+            cursor: pointer;
+        }
+
+        #controls {
+            width: 100%;
+            padding: 15px;
+            background-color: #2b2b2b;
+            text-align: center;
+            z-index: 10;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            font-size: 18px;
+            margin: 0 0 5px 0;
+            color: #fff;
+        }
+
+        p {
+            font-size: 14px;
+            color: #aaa;
+            margin: 0;
+        }
+
+        .status-pill {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-top: 5px;
+            background: #444;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app-container">
+        <canvas id="productCanvas"></canvas>
+    </div>
+
+    <div id="controls">
+        <h1>Interactive Product Demo</h1>
+        <p>Tap the buttons on the image to operate.</p>
+        <div id="status" class="status-pill">OFF</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('productCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusEl = document.getElementById('status');
+        
+        // --- Configuration ---
+        const originalWidth = 1627;
+        const originalHeight = 882;
+        
+        // Coordinates from Python script
+        const points = {
+            "Power": { x: 365, y: 292, r: 25 },
+            "Boost": { x: 366, y: 337, r: 25 },
+            "Hold":  { x: 777, y: 364, r: 35 }, // Slightly bigger hit area for hold
+            "Steam": { x: 1385, y: 173 },
+            "Power_Side": { x: 1051, y: 291, r: 25 },
+            "Boost_Side": { x: 1051, y: 341, r: 25 }
+        };
+
+        const colors = {
+            "Power": "rgba(0, 255, 0, 1.0)",
+            "Boost": "rgba(255, 165, 0, 1.0)",
+            "Steam": "rgba(0, 150, 255, 1.0)"
+        };
+
+        // State Machine
+        let state = {
+            powerOn: false,
+            mode: 1, // 1 = Normal, 2 = Boost
+            holdActive: false
+        };
+
+        // Load Image
+        const img = new Image();
+        img.src = 'steamer.png';
+        img.onload = () => {
+            resizeCanvas();
+            draw();
+        };
+
+        // --- Interaction Logic ---
+        function handleTap(clientX, clientY) {
+            const rect = canvas.getBoundingClientRect();
+            
+            // Calculate scale
+            const scale = canvas.width / originalWidth;
+            
+            // Mouse pos relative to canvas
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+
+            // Convert back to original coordinate space
+            const rawX = x / scale;
+            const rawY = y / scale;
+
+            // Check Buttons
+            for (const [name, p] of Object.entries(points)) {
+                if (p.r) { // Check if it's a clickable button (Steam point has no radius)
+                    const dist = Math.sqrt(Math.pow(rawX - p.x, 2) + Math.pow(rawY - p.y, 2));
+                    if (dist <= p.r * 1.5) { // 1.5x hit tolerance
+                        triggerAction(name);
+                        return;
+                    }
+                }
+            }
+        }
+
+        function triggerAction(name) {
+            if (name === 'Power' || name === 'Power_Side') {
+                state.powerOn = !state.powerOn;
+                if (state.powerOn) state.mode = 1;
+                else { state.mode = 1; state.holdActive = false; }
+            } else if (name === 'Boost' || name === 'Boost_Side') {
+                if (state.powerOn) {
+                    state.mode = (state.mode === 1) ? 2 : 1;
+                }
+            } else if (name === 'Hold') {
+                // Since clicking is instantaneous on web usually, logic might be different?
+                // For touch devices, 'tap' is click. 
+                // We'll treat a tap on Hold as a "Toggle" for convenience if holding is hard?
+                // Or simulate hold? Let's implement real touch start/end for "Hold" button.
+                // But this function is called on simple click. 
+                // Let's rely on dedicated listeners for Hold.
+            }
+            updateUI();
+            draw();
+        }
+        
+        // Hold Button Logic
+        let isHolding = false;
+        
+        function checkHoldHit(clientX, clientY) {
+             const rect = canvas.getBoundingClientRect();
+             const scale = canvas.width / originalWidth;
+             const rawX = (clientX - rect.left) / scale;
+             const rawY = (clientY - rect.top) / scale;
+             
+             const p = points['Hold'];
+             const dist = Math.sqrt(Math.pow(rawX - p.x, 2) + Math.pow(rawY - p.y, 2));
+             return (dist <= p.r * 1.5);
+        }
+
+        // Mouse/Touch Events
+        canvas.addEventListener('mousedown', (e) => {
+            if (checkHoldHit(e.clientX, e.clientY) && state.powerOn) {
+                state.holdActive = true;
+                draw();
+                updateUI();
+                isHolding = true;
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (isHolding) {
+                state.holdActive = false;
+                draw();
+                updateUI();
+                isHolding = false;
+            }
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            // Prevent scrolling
+            // e.preventDefault(); 
+            const touch = e.touches[0];
+            if (checkHoldHit(touch.clientX, touch.clientY) && state.powerOn) {
+                state.holdActive = true;
+                draw();
+                updateUI();
+                isHolding = true;
+            }
+        }, {passive: false});
+
+        window.addEventListener('touchend', () => {
+            if (isHolding) {
+                state.holdActive = false;
+                draw();
+                updateUI();
+                isHolding = false;
+            }
+        });
+
+        // Click for Toggles (Power/Boost)
+        canvas.addEventListener('click', (e) => {
+            // We need to ensure we don't double trigger if it was a hold
+            // But 'click' fires after mousedown/up.
+            // If we were holding, ignore the click
+            if (!state.holdActive && !isHolding) {
+                // Check if it was Hold Button (short tap) -> Do nothing or momentary puff?
+                // Let's just process normal taps
+                if (!checkHoldHit(e.clientX, e.clientY)) {
+                    handleTap(e.clientX, e.clientY);
+                }
+            }
+        });
+
+
+        // --- Drawing Logic ---
+
+        function draw() {
+            // Clear
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 1. Draw original image
+            // We use an offscreen canvas for the lighting layer to multiply correctly
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            if (!state.powerOn) return;
+
+            // 2. Prepare Lighting Layer (Offscreen)
+            const lightCanvas = document.createElement('canvas');
+            lightCanvas.width = canvas.width;
+            lightCanvas.height = canvas.height;
+            const lCtx = lightCanvas.getContext('2d');
+            
+            // Fill white (neutral for multiply)
+            lCtx.fillStyle = 'white';
+            lCtx.fillRect(0,0, lightCanvas.width, lightCanvas.height);
+            
+            const scale = canvas.width / originalWidth;
+
+            // Draw Lights
+            const activeLights = [];
+            
+            // Power (Main + Side) - Green
+            activeLights.push({ ...points.Power, col: colors.Power });
+            activeLights.push({ ...points.Power_Side, col: colors.Power });
+            
+            // Boost (Main + Side) - Orange
+            if (state.mode === 2) {
+                activeLights.push({ ...points.Boost, col: colors.Boost });
+                activeLights.push({ ...points.Boost_Side, col: colors.Boost });
+            }
+
+            // Draw Dots
+            activeLights.forEach(l => {
+                lCtx.beginPath();
+                lCtx.fillStyle = l.col;
+                lCtx.arc(l.x * scale, l.y * scale, l.r * scale, 0, Math.PI * 2);
+                lCtx.fill();
+            });
+
+            // Draw Steam
+            if (state.holdActive) {
+                const sx = points.Steam.x * scale;
+                const sy = points.Steam.y * scale;
+                const col = colors.Steam;
+                const isBoost = (state.mode === 2);
+                
+                // Steam Cloud Shape
+                drawSteamCloud(lCtx, sx, sy, col, isBoost, scale);
+            }
+
+            // Apply Blur to lights
+            // Note: Context filter support varies, but is good in modern browsers.
+            // Alternative is drawing shadowBlur.
+            lCtx.filter = 'blur(5px)';
+            // We need to redraw the canvas onto itself to apply filter? 
+            // Actually filter applies to drawing operations. 
+            // Simple approach: The drawing is already done. Oops.
+            // To blur the *existing* content, we need a different approach or set filter before drawing.
+            // Let's simple use shadowBlur on the arc draw next time, but for now, 
+            // since we already drew, let's just composite it.
+            // NOTE: 'filter' property applies to drawImage too.
+            
+            // 3. Composite Multiply
+            ctx.globalCompositeOperation = 'multiply';
+            
+            // Create a blurred version of the light layer?
+            // Easier: just set filter on the main ctx before drawing the light layer
+            ctx.filter = 'blur(5px)'; 
+            ctx.drawImage(lightCanvas, 0, 0);
+            ctx.filter = 'none'; // Reset
+
+            ctx.globalCompositeOperation = 'source-over';
+        }
+
+        function drawSteamCloud(ctx, x, y, color, isBoost, scaleBase) { 
+            ctx.fillStyle = color;
+            ctx.strokeStyle = color;
+            
+            const boostScale = isBoost ? 1.4 : 1.0;
+            const finalScale = scaleBase * boostScale;
+            
+            // Cloud Blobs
+            // Helper to draw rotated ellipse? Context ellipse is easier
+            
+            // Center Blob
+            ctx.beginPath();
+            ctx.ellipse(x, y, 60 * finalScale, 30 * finalScale, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Left Blob
+            ctx.beginPath();
+            ctx.ellipse(x - 40 * finalScale, y, 40 * finalScale, 40 * finalScale, 0, 0, Math.PI * 2); // Simplified y offset
+            ctx.fill();
+
+            // Right Blob
+            ctx.beginPath();
+            ctx.ellipse(x + 40 * finalScale, y, 40 * finalScale, 30 * finalScale, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            if (isBoost) {
+                // Top Blob (Big Steam)
+                ctx.beginPath();
+                ctx.ellipse(x - 20 * scaleBase, y - 50 * scaleBase, 50 * finalScale, 40 * finalScale, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Lines
+            const lineWidth = (isBoost ? 10 : 6) * scaleBase;
+            ctx.lineWidth = lineWidth;
+            const width = (isBoost ? 180 : 120) * scaleBase;
+            
+            // Main Line
+            ctx.beginPath();
+            ctx.moveTo(x - width/2, y);
+            ctx.lineTo(x + width/2, y);
+            ctx.stroke();
+            
+            // Top/Bottom lines
+            ctx.beginPath();
+            ctx.moveTo(x - width/2 + 10*scaleBase, y - 15*scaleBase);
+            ctx.lineTo(x + width/2 - 10*scaleBase, y - 15*scaleBase);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(x - width/2 + 10*scaleBase, y + 15*scaleBase);
+            ctx.lineTo(x + width/2 - 10*scaleBase, y + 15*scaleBase);
+            ctx.stroke();
+        }
+
+        function updateUI() {
+            if (!state.powerOn) {
+                statusEl.textContent = "OFF";
+                statusEl.style.background = "#444";
+                statusEl.style.color = "#aaa";
+            } else {
+                if (state.holdActive) {
+                    statusEl.textContent = state.mode === 2 ? "STEAMING (BOOST)" : "STEAMING";
+                    statusEl.style.background = "#00aaff";
+                    statusEl.style.color = "#fff";
+                } else {
+                    statusEl.textContent = state.mode === 2 ? "READY (BOOST)" : "READY";
+                    statusEl.style.background = state.mode === 2 ? "#d18c02" : "#00aa00";
+                    statusEl.style.color = "#fff";
+                }
+            }
+        }
+
+        function resizeCanvas() {
+            // Fit to container
+            const container = document.getElementById('app-container');
+            const cw = container.clientWidth;
+            const ch = container.clientHeight;
+            
+            // Aspect Ratio
+            const ratio = originalWidth / originalHeight;
+            
+            let newW = cw;
+            let newH = cw / ratio;
+            
+            if (newH > ch) {
+                newH = ch;
+                newW = ch * ratio;
+            }
+            
+            canvas.width = newW;
+            canvas.height = newH;
+            
+            // Redraw immediately
+            draw();
+        }
+
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+        });
+
+    </script>
+</body>
+</html>
