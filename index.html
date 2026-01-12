@@ -133,20 +133,16 @@
             if (!bgImage) return;
 
             let source = bgImage;
-            // Tint to White if Line Mode
+            // Tint: Use Invert Filter (Works for both Transparent and White-Background images)
             if (state.viewMode === 'line' && bgImage === images.line) {
-                bufferCtx.clearRect(0, 0, bufferCanvas.width, bufferCanvas.height);
-                bufferCtx.globalCompositeOperation = 'source-over';
-                bufferCtx.drawImage(bgImage, 0, 0, mainCanvas.width, mainCanvas.height);
-                // "source-in" retains the Alpha of the Destination (Image) but takes the Color of the Source (White)
-                bufferCtx.globalCompositeOperation = 'source-in';
-                bufferCtx.fillStyle = '#ffffff';
-                bufferCtx.fillRect(0, 0, bufferCanvas.width, bufferCanvas.height);
-                source = bufferCanvas;
+                mainCtx.save();
+                mainCtx.filter = 'invert(1)';
+                mainCtx.drawImage(source, 0, 0, mainCanvas.width, mainCanvas.height);
+                mainCtx.restore();
+            } else {
+                mainCtx.globalCompositeOperation = 'source-over';
+                mainCtx.drawImage(source, 0, 0, mainCanvas.width, mainCanvas.height);
             }
-
-            mainCtx.globalCompositeOperation = 'source-over';
-            mainCtx.drawImage(source, 0, 0, mainCanvas.width, mainCanvas.height);
 
             const scale = mainCanvas.width / originalWidth;
 
