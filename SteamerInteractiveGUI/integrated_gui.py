@@ -53,8 +53,8 @@ class SteamerGUI:
             "Power": (898, 833),
             "Boost": (898, 944),
             "Hold": (1931, 1008),
-            "Power_Side": (2638, 809),
-            "Boost_Side": (2638, 925),
+            "Power_Side": (2688, 809),
+            "Boost_Side": (2688, 925),
             "Hold_Side": (2883, 987)
         }
         
@@ -63,7 +63,7 @@ class SteamerGUI:
         
         # Radius config
         self.line_radius = 50 
-        self.render_radius = 80 # Increased for better touch targets on Renders
+        self.render_radius = 45 # Reverted base radius
         self.current_base_radius = self.line_radius # Active radius setting 
         
         # New White/Monochrome styling
