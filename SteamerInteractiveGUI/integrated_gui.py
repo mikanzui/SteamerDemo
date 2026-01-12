@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
-from PIL import Image, ImageTk, ImageDraw, ImageChops, ImageFilter
+from PIL import Image, ImageTk, ImageDraw, ImageChops, ImageFilter, ImageOps
 import math
 import sys
 import os
@@ -126,31 +126,54 @@ class SteamerGUI:
         # Load Image
         # -----------------
         try:
-            self.image_path = resource_path("test drawing 2.png")
-            # Load and force lines to be WHITE for contrast on dark background
+            self.image_path = resource_path("steamer.png")
+            # Load High-Res Image
             raw_img = Image.open(self.image_path).convert("RGBA")
             
-            # Create a solid white image of the same size
-            white_fill = Image.new("RGBA", raw_img.size, (255, 255, 255, 255))
-            # Extract alpha channel from original to use as mask
-            _, _, _, alpha = raw_img.split()
-            # Composite: Put White color into the shape defined by the original Alpha
-            self.base_image_original = Image.merge("RGBA", (*white_fill.split()[:3], alpha))
+            # Processing: Invert colors to match Web Version (White Lines on Black BG)
+            # This replicates the "Process" used in the web app
+            if raw_img.mode == 'RGBA':
+                r, g, b, a = raw_img.split()
+                rgb_img = Image.merge('RGB', (r, g, b))
+                inverted_rgb = ImageOps.invert(rgb_img)
+                r2, g2, b2 = inverted_rgb.split()
+                self.base_image_original = Image.merge('RGBA', (r2, g2, b2, a))
+            else:
+                self.base_image_original = ImageOps.invert(raw_img.convert('RGB')).convert('RGBA')
             
-            # OPTIMIZATION: Downscale image if too large to prevent lag
+            # COORDINATE SCALING Logic
+            # 1. Adapt to new image resolution (Reference: 1627x882)
+            self.orig_w, self.orig_h = self.base_image_original.size
+            xref = 1627.0
+            
+            if self.orig_w != xref:
+                scale_factor = self.orig_w / xref
+                # Scale all defined points to match the loaded image resolution
+                for p_dict in [self.line_points, self.render_points]:
+                    for k in p_dict:
+                        px, py = p_dict[k]
+                        p_dict[k] = (px * scale_factor, py * scale_factor)
+            
+            # 2. Optimization: Downscale if too large for display (Max 1600px)
             max_dim = 1600
             w, h = self.base_image_original.size
             if w > max_dim or h > max_dim:
                 ratio = min(max_dim/w, max_dim/h)
                 new_size = (int(w*ratio), int(h*ratio))
                 self.base_image_original = self.base_image_original.resize(new_size, Image.Resampling.LANCZOS)
-                # Rescale coordinate points
-                for k in self.original_points:
-                    px, py = self.original_points[k]
-                    self.original_points[k] = (px * ratio, py * ratio)
-                self.line_radius *= ratio # Scale line radius
-                self.render_radius *= ratio # Scale render radius
+                
+                # Apply downscale ratio to points PERMANENTLY so they match the image
+                for p_dict in [self.line_points, self.render_points]:
+                    for k in p_dict:
+                        px, py = p_dict[k]
+                        p_dict[k] = (px * ratio, py * ratio)
+                        
+                self.line_radius *= ratio 
+                self.render_radius *= ratio 
                 self.current_base_radius = self.line_radius
+            
+            # Set Active Points
+            self.original_points = self.line_points.copy()
             
             self.current_processed_image = self.base_image_original.copy()
             self.orig_w, self.orig_h = self.base_image_original.size
