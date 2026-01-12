@@ -121,10 +121,11 @@
             state.heatingStartTime = performance.now() / 1000; 
             state.heatingProgress = 0.0; 
         }
-        function cancelHeating() { state.isHeating = false; }
+        function cancelHeating() { state.isHeating = false; updateControls(); }
         function finishHeating() { 
             state.isHeating = false; 
             state.mode = state.targetMode; 
+            updateControls();
         }
         function startHold(e) { if (e) e.preventDefault(); if (state.powerOn) { state.holdActive = true; updateControls(); } }
         function stopHold(e) { state.holdActive = false; updateControls(); }
@@ -143,6 +144,7 @@
                     state.pulseIntensity = 0.2 + (((Math.sin(pulsePhase) + 1) / 2) * 0.8);
                 }
             } else state.pulseIntensity = 0.0;
+            updateControls(); // Sync UI every frame for animations
             drawMain(); drawFlowchart(); requestAnimationFrame(loop);
         }
 
@@ -456,11 +458,48 @@
 
         const ledPower = document.getElementById('led-power'); const ledBoost = document.getElementById('led-boost'); const textStatus = document.getElementById('text-status');
         function updateControls() {
-            ledPower.style.backgroundColor = state.powerOn ? '#ffffff' : '#3a3a3a';
-            if (state.isHeating) { const v = Math.floor(state.pulseIntensity * 255); const hex = v.toString(16).padStart(2,'0'); ledBoost.style.backgroundColor = `#${hex}${hex}${hex}`; } 
-            else { const boostActive = state.powerOn && (state.mode === 2); ledBoost.style.backgroundColor = boostActive ? '#ffffff' : '#3a3a3a'; }
-            if (state.powerOn) { textStatus.textContent = state.holdActive ? "STEAMING" : "READY"; textStatus.style.color = state.holdActive ? "#ffffff" : "#00ff00"; } 
-            else { textStatus.textContent = "READY"; textStatus.style.color = "#555555"; }
+            // Power LED (Green #00ff00)
+            if (state.powerOn) {
+                if (state.isHeating && state.targetMode === 1) {
+                    // Pulse Green
+                    const v = Math.floor(state.pulseIntensity * 255);
+                    ledPower.style.backgroundColor = `rgb(0, ${v}, 0)`;
+                } else {
+                    ledPower.style.backgroundColor = '#00ff00';
+                }
+            } else {
+                ledPower.style.backgroundColor = '#3a3a3a';
+            }
+
+            // Boost LED (Orange #FFA500)
+            if (state.powerOn) {
+                if (state.isHeating && state.targetMode === 2) {
+                    // Pulse Orange
+                    const v = Math.floor(state.pulseIntensity * 255);
+                    const g = Math.floor(v * 0.65); // Maintain orange ratio
+                    ledBoost.style.backgroundColor = `rgb(${v}, ${g}, 0)`;
+                } else if (state.mode === 2) {
+                    ledBoost.style.backgroundColor = '#FFA500';
+                } else {
+                    ledBoost.style.backgroundColor = '#3a3a3a';
+                }
+            } else {
+                ledBoost.style.backgroundColor = '#3a3a3a';
+            }
+
+            // Status Text
+            if (state.powerOn) { 
+                if (state.holdActive) {
+                    textStatus.textContent = "STEAMING"; 
+                    textStatus.style.color = "#00aaaa"; // Cyan
+                } else {
+                    textStatus.textContent = "READY"; 
+                    textStatus.style.color = "#00ff00"; // Green
+                }
+            } else { 
+                textStatus.textContent = "STANDBY"; 
+                textStatus.style.color = "#555555"; 
+            }
         }
     </script>
 </body>
