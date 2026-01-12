@@ -229,8 +229,8 @@
              ctx.fillStyle = "#444444"; ctx.fillRect(bx, by, barW, barH);
              const fillW = barW * state.heatingProgress; ctx.fillStyle = "#ffffff"; ctx.fillRect(bx, by, fillW, barH);
              ctx.fillStyle = "#aaaaaa"; ctx.font = "12px Segoe UI";
-             const remaining = Math.max(0, 5.0 * (1.0 - state.heatingProgress));
-             ctx.fillText(remaining.toFixed(1) + "s", cx, by + 25);
+             const percent = Math.floor(state.heatingProgress * 100);
+             ctx.fillText(percent + "%", cx, by + 25);
         }
 
         function handleInput(x, y) {
