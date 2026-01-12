@@ -36,32 +36,27 @@ class SteamerGUI:
         # -----------------
         # Configuration
         # -----------------
-        # Coordinates for LINE DRAWING mode
+        # Coordinates for LINE DRAWING mode (Recalibrated for 4000x2110px)
         self.line_points = {
-            "Power": (365, 292),
-            "Boost": (366, 337),
-            "Hold": (777, 364),
-            "Steam": (1385, 173),
-            "Power_Side": (1051, 291),
-            "Boost_Side": (1051, 341)
+            "Power": (597, 669),
+            "Boost": (597, 800),
+            "Hold": (1776, 877), # Middle/Front View Trigger
+            "Steam": (1776, 350), # Estimated Nozzle (Top of Front View)
+            "Power_Side": (2634, 674),
+            "Boost_Side": (2637, 797),
+            "Hold_Side": (2914, 872)
         }
         
         # Coordinates for RENDER mode (Photo Realistic)
-        self.render_points = {
-            "Power": (375, 347),
-            "Boost": (375, 382), # Moved UP ~12px
-            "Hold": (806, 419),
-            "Power_Side": (1100, 340),
-            "Boost_Side": (1099, 386),
-            "Hold_Side": (1202, 413) # New button on side view
-        }
+        # Assuming same positions for now as we don't have separate renders matching the new PDF
+        self.render_points = self.line_points.copy()
         
         # Default to line points initially
         self.original_points = self.line_points.copy()
         
         # Radius config
-        self.line_radius = 25
-        self.render_radius = 18 # Smaller hit zones for renders
+        self.line_radius = 50 # Increased for 4k resolution
+        self.render_radius = 40 
         self.current_base_radius = self.line_radius # Active radius setting 
         
         # New White/Monochrome styling
@@ -142,9 +137,9 @@ class SteamerGUI:
                 self.base_image_original = ImageOps.invert(raw_img.convert('RGB')).convert('RGBA')
             
             # COORDINATE SCALING Logic
-            # 1. Adapt to new image resolution (Reference: 1627x882)
+            # 1. Adapt to new image resolution (Reference: 4000x2110)
             self.orig_w, self.orig_h = self.base_image_original.size
-            xref = 1627.0
+            xref = 4000.0
             
             if self.orig_w != xref:
                 scale_factor = self.orig_w / xref
