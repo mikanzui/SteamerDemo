@@ -690,7 +690,8 @@ class SteamerGUI:
             self.canvas.create_rectangle(bx1, by1, bx1 + fill_w, by2, fill="#ffffff", outline="", tags="overlay")
         
         # Time Text - Grey
-        self.canvas.create_text(cx, by2 + 20, text=f"{remaining:.1f}s", fill="#aaaaaa", font=("Segoe UI", 12), tags="overlay")
+        percent = int(self.heating_progress * 100)
+        self.canvas.create_text(cx, by2 + 20, text=f"{percent}%", fill="#aaaaaa", font=("Segoe UI", 12), tags="overlay")
 
     def start_hold(self):
         if not self.power_on: return
