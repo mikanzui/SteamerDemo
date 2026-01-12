@@ -256,34 +256,35 @@ class SteamerGUI:
         self.steam_sprites = {}
         
         for kind in ["normal", "boost"]:
-            sw, sh = 300, 250 # Reduced height
+            sw, sh = 600, 500 # Doubled canvas size (was 300, 250)
             sprite = Image.new("RGBA", (sw, sh), (0,0,0,0))
             draw_s = ImageDraw.Draw(sprite)
             sx, sy = sw//2, sh//2
             col = (255, 255, 255)
             
             is_boost = (kind == "boost")
-            scale = 1.4 if is_boost else 1.0 
-            width = 180 if is_boost else 120
-            line_w = 10 if is_boost else 6
+            base_s = 2.0 # Scale Factor
+            scale = (1.4 if is_boost else 1.0) * base_s
+            width = (180 if is_boost else 120) * base_s
+            line_w = (10 if is_boost else 6) * base_s
             
             # Blobs
             draw_s.ellipse((sx - 60*scale, sy - 30*scale, sx + 60*scale, sy + 30*scale), fill=col + (255,))
             draw_s.ellipse((sx - 40*scale, sy - 40*scale, sx + 20*scale, sy + 20*scale), fill=col + (255,))
             draw_s.ellipse((sx + 10*scale, sy - 35*scale, sx + 70*scale, sy + 15*scale), fill=col + (255,))
             if is_boost:
-                draw_s.ellipse((sx - 70, sy - 60, sx + 10, sy + 10), fill=col + (255,))
-                draw_s.ellipse((sx - 20, sy - 70, sx + 80, sy + 0), fill=col + (255,))
+                draw_s.ellipse((sx - 70*base_s, sy - 60*base_s, sx + 10*base_s, sy + 10*base_s), fill=col + (255,))
+                draw_s.ellipse((sx - 20*base_s, sy - 70*base_s, sx + 80*base_s, sy + 0), fill=col + (255,))
             
             # Lines
             draw_s.line((sx - width//2, sy, sx + width//2, sy), fill=col + (255,), width=line_w)
-            draw_s.line((sx - width//2 + 10, sy - 15, sx + width//2 - 10, sy - 15), fill=col + (255,), width=line_w)
-            draw_s.line((sx - width//2 + 10, sy + 15, sx + width//2 - 10, sy + 15), fill=col + (255,), width=line_w)
+            draw_s.line((sx - width//2 + 10*base_s, sy - 15*base_s, sx + width//2 - 10*base_s, sy - 15*base_s), fill=col + (255,), width=line_w)
+            draw_s.line((sx - width//2 + 10*base_s, sy + 15*base_s, sx + width//2 - 10*base_s, sy + 15*base_s), fill=col + (255,), width=line_w)
             if is_boost:
-                draw_s.line((sx - width//2 + 30, sy - 30, sx + width//2 - 30, sy - 30), fill=col + (255,), width=line_w)
-                draw_s.line((sx - width//2 + 30, sy + 30, sx + width//2 - 30, sy + 30), fill=col + (255,), width=line_w)
+                draw_s.line((sx - width//2 + 30*base_s, sy - 30*base_s, sx + width//2 - 30*base_s, sy - 30*base_s), fill=col + (255,), width=line_w)
+                draw_s.line((sx - width//2 + 30*base_s, sy + 30*base_s, sx + width//2 - 30*base_s, sy + 30*base_s), fill=col + (255,), width=line_w)
             
-            self.steam_sprites[kind] = sprite.filter(ImageFilter.GaussianBlur(radius=8))
+            self.steam_sprites[kind] = sprite.filter(ImageFilter.GaussianBlur(radius=8*base_s))
 
     def configure_styles(self):
         self.style = ttk.Style()
