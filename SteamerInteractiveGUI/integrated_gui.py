@@ -81,6 +81,7 @@ class SteamerGUI:
         # State
         self.power_on = False
         self.mode = 1 
+        self.target_mode = 1 # Target mode after heating
         self.hold_active = False 
         self.is_heating = False
         self.pulse_intensity = 0.0 # 0.0 to 1.0 multiplier
@@ -505,68 +506,66 @@ class SteamerGUI:
 
         def draw_line(x1, y1, x2, y2):
             self.flow_canvas.create_line(x1, y1, x2, y2, **arrow_opts)
-
-        # Labels for transitions
+            
         def label_line(x, y, txt):
             self.flow_canvas.create_text(x, y, text=txt, fill="#888888", font=("Segoe UI", 7, "italic"))
 
-        # --- Nodes ---
+        # --- Re-Layout ---
+        # Row 1: OFF
+        _, _, _, b_off_y2, off_x, off_y = draw_box(cx, 30, 80, 30, "OFF", "off")
         
-        # Level 1: OFF
-        _, _, _, b_off_y2, off_x, off_y = draw_box(cx, 40, 80, 30, "OFF", "off")
+        # Row 2: Power Heat (Vertical flow)
+        _, b_pheat_y1, _, b_pheat_y2, pheat_x, pheat_y = draw_box(cx, 80, 80, 30, "Power Heat\n(8s)", "p_heat")
         
-        # Level 2: ON (Split into Normal and Boost columns)
-        # Left Column (Normal): x = 80
-        # Right Column (Boost): x = 220
-        norm_x = 90
-        heat_x = 190 # Middle
+        # Row 3: Normal / Boost Loop
+        row3_y = 170
+        norm_x = 70
         boost_x = 290
-        l2_y = 130
+        bheat_x = 180
         
-        _, b_norm_y1, _, b_norm_y2, _, _ = draw_box(norm_x, l2_y, 80, 40, "ON\n(Normal)", "normal")
-        # Heating Box
-        _, b_heat_y1, _, b_heat_y2, _, _ = draw_box(heat_x, l2_y, 60, 30, "Heating\n(5s)", "heating")
-        _, b_boost_y1, _, b_boost_y2, _, _ = draw_box(boost_x, l2_y, 80, 40, "ON\n(Boost)", "boost")
+        _, b_norm_y1, _, b_norm_y2, _, _ = draw_box(norm_x, row3_y, 80, 40, "ON\n(Normal)", "normal")
+        _, b_bheat_y1, _, b_bheat_y2, _, _ = draw_box(bheat_x, row3_y, 70, 30, "Boost Heat\n(8s)", "b_heat")
+        _, b_boost_y1, _, b_boost_y2, _, _ = draw_box(boost_x, row3_y, 80, 40, "ON\n(Boost)", "boost")
 
-        # Level 3: Hold / Steam
-        l3_y = 250
-        draw_box(norm_x, l3_y, 80, 40, "STEAM\n(Normal)", "steam_norm")
-        draw_box(boost_x, l3_y, 80, 40, "STEAM\n(Boost)", "steam_boost")
+        # Row 4: Steam
+        row4_y = 280
+        draw_box(norm_x, row4_y, 80, 40, "STEAM\n(Normal)", "steam_norm")
+        draw_box(boost_x, row4_y, 80, 40, "STEAM\n(Boost)", "steam_boost")
 
         # --- Connections ---
         
-        # Power ON (Off -> Normal)
-        draw_line(off_x, b_off_y2, norm_x, b_norm_y1)
-        label_line((off_x+norm_x)/2, (b_off_y2+b_norm_y1)/2, "Power")
-
-        # Boost Toggle (Normal <-> Heating <-> Boost)
-        # Normal -> Heating
-        draw_line(norm_x+40, l2_y, heat_x-30, l2_y)
-        # Heating -> Boost
-        draw_line(heat_x+30, l2_y, boost_x-40, l2_y)
-        # Back from Boost to Normal
-        self.flow_canvas.create_line(boost_x-40, l2_y+20, norm_x+40, l2_y+20, **arrow_opts)
+        # OFF -> Power Heat
+        draw_line(off_x, b_off_y2, pheat_x, b_pheat_y1)
+        label_line(cx + 25, (b_off_y2+b_pheat_y1)/2, "Power")
         
-        # Label
-        label_line(heat_x, l2_y-25, "Boost Btn")
+        # Power Heat -> Normal 
+        # (Center to Left)
+        self.flow_canvas.create_line(cx, b_pheat_y2, cx, row3_y-30, norm_x, row3_y-30, norm_x, b_norm_y1, **arrow_opts)
 
-        # Hold Steam (Normal -> Steam Norm)
-        draw_line(norm_x, b_norm_y2, norm_x, l3_y-20) 
-        label_line(norm_x+5, (b_norm_y2+l3_y-20)/2, "Hold")
-
-        # Hold Steam (Boost -> Steam Boost)
-        draw_line(boost_x, b_boost_y2, boost_x, l3_y-20)
-        label_line(boost_x+5, (b_boost_y2+l3_y-20)/2, "Hold")
-
+        # Normal <-> Boost Heat <-> Boost
+        draw_line(norm_x+40, row3_y, bheat_x-35, row3_y)
+        draw_line(bheat_x+35, row3_y, boost_x-40, row3_y)
+        
+        # Back loop
+        self.flow_canvas.create_line(boost_x, b_boost_y2+5, boost_x, row3_y+35, norm_x, row3_y+35, norm_x, b_norm_y2+5, **arrow_opts)
+        label_line(bheat_x, row3_y+40, "Boost Btn")
+        
+        # Steam
+        draw_line(norm_x, b_norm_y2, norm_x, row4_y-20) 
+        draw_line(boost_x, b_boost_y2, boost_x, row4_y-20)
 
     # -----------------
     # State Logic
     # -----------------
     def toggle_power(self):
-        self.power_on = not self.power_on
-        if self.power_on: 
-            self.mode = 1
+        if not self.power_on:
+            # Turn ON -> Start Heat -> Normal
+            self.power_on = True
+            # self.mode = 1 # Logic handled in finish_heating usually, but we set target
+            self.start_heating(1)
         else: 
+            # Turn OFF
+            self.power_on = False
             self.mode = 1
             self.hold_active = False
             self.cancel_heating()
@@ -577,20 +576,18 @@ class SteamerGUI:
         
         if self.mode == 1:
             # Switching TO Boost -> Start Heating
-            self.mode = 2
-            self.start_heating()
+            # self.mode = 2 # Set after heating
+            self.start_heating(2)
         else:
             # Switching TO Normal
             self.mode = 1
             self.cancel_heating()
             self.refresh_ui()
 
-    def start_heating(self):
+    def start_heating(self, target_mode):
         self.is_heating = True
-        
-        # Duration params
-        self.real_duration = 1.0 # 1s (seconds)
-        self.sim_duration = 5.0  # 5s
+        self.target_mode = target_mode
+        self.real_duration = 8.0  # 8s Heat Up
         
         # Use Time-Delta to prevent drift/lag
         self.heating_start_time = time.time()
@@ -604,7 +601,7 @@ class SteamerGUI:
         self.process_heating_step()
 
     def process_heating_step(self):
-        if not self.is_heating or not self.power_on or self.mode != 2:
+        if not self.is_heating or not self.power_on:
             self.cancel_heating()
             return
             
@@ -692,8 +689,49 @@ class SteamerGUI:
         # Time Text - Grey
         percent = int(self.heating_progress * 100)
         self.canvas.create_text(cx, by2 + 20, text=f"{percent}%", fill="#aaaaaa", font=("Segoe UI", 12), tags="overlay")
-
-    def start_hold(self):
+        
+        # Title text
+        title = "HEATING UP (BOOST)..." if self.target_mode == 2 else "HEATING UP..."
+        # Update text item
+        # self.canvas.itemconfigure... wait, I'm redrawing every frame or just updating? 
+        # I am deleting "overlay" tags every frame at start of update_heating_overlay?
+        # No, update_heating_overlay calls 'delete("overlay")' at start? No. 
+        # check_heating calls update_heating_overlay.
+        # Let's check update_heating_overlay implementation.
+        # It calls self.canvas.delete("overlay") at the top.
+        # So I just need to change the create_text call.
+    
+    def update_heating_overlay(self):
+        self.canvas.delete("overlay")
+        # If holding steam, hide the heating overlay
+        if self.hold_active: return
+        # if not self.is_heating: return # Logic handled in loop
+        
+        cw = self.canvas.winfo_width()
+        ch = self.canvas.winfo_height()
+        cx = cw // 2
+        y_top = 40
+        w, h = 300, 100
+        x1, y1 = cx - w//2, y_top
+        x2, y2 = cx + w//2, y_top + h
+        
+        self.canvas.create_rectangle(x1, y1, x2, y2, fill="#2b2b2b", outline="#ffffff", width=2, tags="overlay")
+        
+        title = "HEATING UP (BOOST)..." if self.target_mode == 2 else "HEATING UP..."
+        self.canvas.create_text(cx, y1 + 25, text=title, fill="#ffffff", font=("Segoe UI", 16, "bold"), tags="overlay")
+        
+        remaining = max(0.0, 5.0 * (1.0 - self.heating_progress)) # Legacy var name
+        bar_w = 250; bar_h = 12
+        bx1 = cx - bar_w//2; by1 = y1 + 55
+        bx2 = cx + bar_w//2; by2 = by1 + bar_h
+        
+        self.canvas.create_rectangle(bx1, by1, bx2, by2, fill="#444444", outline="", tags="overlay")
+        fill_w = bar_w * self.heating_progress
+        if fill_w > 0:
+            self.canvas.create_rectangle(bx1, by1, bx1 + fill_w, by2, fill="#ffffff", outline="", tags="overlay")
+        
+        percent = int(self.heating_progress * 100)
+        self.canvas.create_text(cx, by2 + 20, text=f"{percent}%", fill="#aaaaaa", font=("Segoe UI", 12), tags="overlay")
         if not self.power_on: return
         self.hold_active = True
         self.refresh_ui()
@@ -761,17 +799,24 @@ class SteamerGUI:
 
         if self.power_on:
             # 1. Standard Lights
-            active_lights = [
-                ("Power", 1.0),
-                ("Power_Side", 1.0)
-            ]
+            active_lights = []
             
-            if self.mode == 2: 
+            # Power Light logic - Always ON unless specific off case?
+            # User wants Power to flash during Power Heat Up (targetMode=1)
+            p_intensity = 1.0
+            if self.is_heating and self.target_mode == 1:
+                p_intensity = self.pulse_intensity
+            
+            active_lights.append(("Power", p_intensity))
+            active_lights.append(("Power_Side", p_intensity))
+            
+            # Boost Light logic
+            if self.mode == 2 or (self.is_heating and self.target_mode == 2): 
                 # Boost lights logic
-                intensity = self.pulse_intensity if self.is_heating else 1.0
-                active_lights.append(("Boost", intensity))
-                active_lights.append(("Boost_Side", intensity))
-                
+                b_intensity = self.pulse_intensity if (self.is_heating and self.target_mode == 2) else 1.0
+                active_lights.append(("Boost", b_intensity))
+                active_lights.append(("Boost_Side", b_intensity))
+            
             for name, intensity in active_lights:
                 if intensity < 0.05: continue
 
