@@ -62,8 +62,8 @@ class SteamerGUI:
         self.original_points = self.line_points.copy()
         
         # Radius config
-        self.line_radius = 50 # Increased for 4k resolution
-        self.render_radius = 40 
+        self.line_radius = 50 
+        self.render_radius = 80 # Increased for better touch targets on Renders
         self.current_base_radius = self.line_radius # Active radius setting 
         
         # New White/Monochrome styling
