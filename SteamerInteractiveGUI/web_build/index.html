@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Steamer Interactive GUI (v3.9)</title>
+    <title>Steamer Interactive GUI (v4.0)</title>
     <style>
         body { margin: 0; padding: 0; background-color: #1e1e1e; font-family: 'Segoe UI', sans-serif; color: #eeeeee; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         #controls-bar { background-color: #2b2b2b; padding: 5px 20px; display: flex; justify-content: center; align-items: center; border-bottom: 1px solid #333; flex-shrink: 0; }
@@ -375,13 +375,13 @@
              renderNode(cx, ry1, "OFF", offActive ? 'on' : 'off', 80, 30, offActive);
              
              let pHeatActive = (state.isHeating && state.targetMode === 1);
-             renderNode(cx, ry2, "Power Heat\n(8s)", pHeatActive ? 'on' : 'off', 80, 30, pHeatActive);
+             renderNode(cx, ry2, "Power Heat", pHeatActive ? 'on' : 'off', 80, 30, pHeatActive);
              
              let normActive = (state.powerOn && state.mode === 1 && !state.isHeating);
              renderNode(rxNorm, ry3, "ON\n(Normal)", normActive ? 'on' : 'off', 80, h, normActive);
              
              let bHeatActive = (state.isHeating && state.targetMode === 2);
-             renderNode(rxBHeat, ry3, "Boost Heat\n(8s)", bHeatActive ? 'on' : 'off', 70, 30, bHeatActive);
+             renderNode(rxBHeat, ry3, "Boost Heat", bHeatActive ? 'on' : 'off', 70, 30, bHeatActive);
              
              let boostActive = (state.powerOn && state.mode === 2 && !state.isHeating);
              renderNode(rxBoost, ry3, "ON\n(Boost)", boostActive ? 'on' : 'off', 80, h, boostActive);
