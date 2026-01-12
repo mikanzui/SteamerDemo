@@ -1,0 +1,30 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare Deployment Files
+        run: |
+          mkdir public
+          cp SteamerInteractiveGUI/web_build/index.html public/index.html
+          cp SteamerInteractiveGUI/steamer.png public/steamer.png
+          cp -r SteamerInteractiveGUI/Renders public/Renders
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: public
