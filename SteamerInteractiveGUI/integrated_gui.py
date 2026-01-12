@@ -48,8 +48,15 @@ class SteamerGUI:
         }
         
         # Coordinates for RENDER mode (Photo Realistic)
-        # Assuming same positions for now as we don't have separate renders matching the new PDF
-        self.render_points = self.line_points.copy()
+        # Recalibrated to 3840x2158
+        self.render_points = {
+            "Power": (898, 833),
+            "Boost": (898, 944),
+            "Hold": (1931, 1008),
+            "Power_Side": (2638, 809),
+            "Boost_Side": (2638, 925),
+            "Hold_Side": (2883, 987)
+        }
         
         # Default to line points initially
         self.original_points = self.line_points.copy()
@@ -143,11 +150,10 @@ class SteamerGUI:
             
             if self.orig_w != xref:
                 scale_factor = self.orig_w / xref
-                # Scale all defined points to match the loaded image resolution
-                for p_dict in [self.line_points, self.render_points]:
-                    for k in p_dict:
-                        px, py = p_dict[k]
-                        p_dict[k] = (px * scale_factor, py * scale_factor)
+                # Scale LINE points to match the loaded image resolution
+                for k in self.line_points:
+                    px, py = self.line_points[k]
+                    self.line_points[k] = (px * scale_factor, py * scale_factor)
             
             # 2. Optimization: Downscale if too large for display (Max 1600px)
             max_dim = 1600
@@ -157,14 +163,26 @@ class SteamerGUI:
                 new_size = (int(w*ratio), int(h*ratio))
                 self.base_image_original = self.base_image_original.resize(new_size, Image.Resampling.LANCZOS)
                 
-                # Apply downscale ratio to points PERMANENTLY so they match the image
-                for p_dict in [self.line_points, self.render_points]:
-                    for k in p_dict:
-                        px, py = p_dict[k]
-                        p_dict[k] = (px * ratio, py * ratio)
-                        
+                # Apply downscale ratio to LINE points
+                for k in self.line_points:
+                    px, py = self.line_points[k]
+                    self.line_points[k] = (px * ratio, py * ratio)
+                
+                # Apply Separate Scaling for Render Points (Reference: 3840x2158)
+                # We need to map 3840x2158 space -> new_size (which matches Line Drawing aspect)
+                # This accounts for the slight stretch/squash applied to renders
+                xref_render = 3840.0
+                yref_render = 2158.0
+                
+                ratio_rx = new_size[0] / xref_render
+                ratio_ry = new_size[1] / yref_render
+                
+                for k in self.render_points:
+                    px, py = self.render_points[k]
+                    self.render_points[k] = (px * ratio_rx, py * ratio_ry)
+
                 self.line_radius *= ratio 
-                self.render_radius *= ratio 
+                self.render_radius *= ratio_rx # Scale radius by Width ratio roughly
                 self.current_base_radius = self.line_radius
             
             # Set Active Points
@@ -265,8 +283,8 @@ class SteamerGUI:
             is_boost = (kind == "boost")
             base_s = 2.0 # Scale Factor
             scale = (1.4 if is_boost else 1.0) * base_s
-            width = (180 if is_boost else 120) * base_s
-            line_w = (10 if is_boost else 6) * base_s
+            width = int((180 if is_boost else 120) * base_s)
+            line_w = int((10 if is_boost else 6) * base_s)
             
             # Blobs
             draw_s.ellipse((sx - 60*scale, sy - 30*scale, sx + 60*scale, sy + 30*scale), fill=col + (255,))
