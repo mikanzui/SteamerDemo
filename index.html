@@ -222,25 +222,74 @@
 
         const flowCanvas = document.getElementById('flow-canvas');
         const flowCtx = flowCanvas.getContext('2d');
+        
         function drawFlowchart() {
-             const w = flowCanvas.width; const h = flowCanvas.height; flowCtx.clearRect(0,0,w,h); const cx = w/2;
-             renderNode(cx, 40, "OFF", 'off'); renderNode(70, 130, "ON\n(Normal)", 'normal'); renderNode(210, 130, "ON\n(Boost)", 'boost'); renderNode(70, 250, "STEAM\n(Normal)", 'steam_norm'); renderNode(210, 250, "STEAM\n(Boost)", 'steam_boost');
-             flowCtx.strokeStyle = "#444444"; drawLink(cx, 60, 70, 110); drawLink(110, 130, 170, 130); drawLink(70, 150, 70, 230); drawLink(210, 150, 210, 230);
-        }
-        function drawLink(x1, y1, x2, y2) { flowCtx.beginPath(); flowCtx.moveTo(x1, y1); flowCtx.lineTo(x2, y2); flowCtx.stroke(); }
-        function renderNode(x, y, txt, tag) {
-            let active = false;
-            if (!state.powerOn && tag === 'off') active = true;
-            else if (state.powerOn && !state.holdActive) { if(state.mode === 1 && tag === 'normal') active = true; if(state.mode === 2 && tag === 'boost') active = true; if(state.isHeating && tag === 'boost') active = true; }
-            else if (state.powerOn && state.holdActive) { if(state.mode === 1 && tag === 'steam_norm') active = true; if(state.mode === 2 && tag === 'steam_boost') active = true; }
-            flowCtx.fillStyle = active ? (tag==='off'?'#555':'#00aa00') : '#333';
-            if ((tag === 'boost' || tag === 'steam_boost') && active) flowCtx.fillStyle = '#d18c02';
-            if ((tag.includes('steam')) && active) flowCtx.fillStyle = '#00aaaa';
+             const w = flowCanvas.width; const h = flowCanvas.height; 
+             flowCtx.clearRect(0,0,w,h); 
+             const cx = w/2;
+             const y1 = 40; const y2 = 130; const y3 = 250;
+             const xNorm = 60; const xHeat = 140; const xBoost = 220;
              
-            if (active) { flowCtx.strokeStyle = "#fff"; flowCtx.lineWidth = 2; } else { flowCtx.strokeStyle = "#555"; flowCtx.lineWidth = 1; }
-            flowCtx.beginPath(); flowCtx.rect(x-40, y-15, 80, 40); flowCtx.fill(); flowCtx.stroke();
-            flowCtx.fillStyle = active ? 'black' : '#888'; flowCtx.font = "bold 10px Segoe UI"; flowCtx.textAlign = "center";
-            const lines = txt.split('\n'); flowCtx.fillText(lines[0], x, y); if(lines[1]) flowCtx.fillText(lines[1], x, y+10);
+             // Nodes
+             renderNode(cx, y1, "OFF", 'off', 80, 30);
+             renderNode(xNorm, y2, "ON\n(Normal)", 'normal', 80, 40);
+             renderNode(xHeat, y2, "Heating\n(wait)", 'heating', 60, 30);
+             renderNode(xBoost, y2, "ON\n(Boost)", 'boost', 80, 40);
+             renderNode(xNorm, y3, "STEAM\n(Normal)", 'steam_norm', 80, 40);
+             renderNode(xBoost, y3, "STEAM\n(Boost)", 'steam_boost', 80, 40);
+             
+             flowCtx.strokeStyle = "#444444"; flowCtx.fillStyle = "#888888"; 
+             flowCtx.font = "italic 10px Segoe UI"; flowCtx.textAlign = "center";
+
+             // Connections
+             drawLink(cx, y1+15, xNorm, y2-20); flowCtx.fillText("Power", (cx+xNorm)/2 + 10, (y1+y2)/2);
+             drawLink(xNorm+40, y2, xHeat-30, y2);
+             drawLink(xHeat+30, y2, xBoost-40, y2);
+             
+             // Return Loop (Boost -> Norm)
+             flowCtx.beginPath(); flowCtx.moveTo(xBoost, y2+20); flowCtx.lineTo(xBoost, y2+35);
+             flowCtx.lineTo(xNorm, y2+35); flowCtx.lineTo(xNorm, y2+20); flowCtx.stroke();
+             flowCtx.fillText("Boost Btn", xHeat, y2-25);
+
+             drawLink(xNorm, y2+20, xNorm, y3-20); flowCtx.fillText("Hold", xNorm-15, (y2+y3)/2);
+             drawLink(xBoost, y2+20, xBoost, y3-20); flowCtx.fillText("Hold", xBoost-15, (y2+y3)/2);
+        }
+
+        function drawLink(x1, y1, x2, y2) { flowCtx.beginPath(); flowCtx.moveTo(x1, y1); flowCtx.lineTo(x2, y2); flowCtx.stroke(); }
+        
+        function renderNode(x, y, txt, tag, w, h) {
+            let active = false;
+            let fill = '#333'; let stroke = '#555'; let text = '#888';
+            
+            if (!state.powerOn) { 
+                if(tag === 'off') active=true; 
+            } else {
+                if (state.isHeating) { if(tag === 'heating') active = true; }
+                else {
+                    if (state.mode === 1) {
+                         if (state.holdActive && tag === 'steam_norm') active = true; 
+                         else if (!state.holdActive && tag === 'normal') active = true; 
+                    } else {
+                         if (state.holdActive && tag === 'steam_boost') active = true; 
+                         else if (!state.holdActive && tag === 'boost') active = true; 
+                    }
+                }
+            }
+
+            if (active) {
+                stroke = '#fff'; text = '#fff';
+                if (tag === 'off') fill = '#555';
+                else if (tag === 'normal') fill = '#006600';
+                else if (tag === 'boost' || tag === 'heating') fill = '#885500';
+                else if (tag.includes('steam')) fill = '#006666';
+            }
+
+            flowCtx.fillStyle = fill; flowCtx.strokeStyle = stroke; flowCtx.lineWidth = active ? 2 : 1;
+            flowCtx.beginPath(); flowCtx.rect(x - w/2, y - h/2, w, h); flowCtx.fill(); flowCtx.stroke();
+            
+            flowCtx.fillStyle = text; flowCtx.font = active ? "bold 10px Segoe UI" : "10px Segoe UI"; flowCtx.textAlign = "center";
+            const lines = txt.split('\n');
+            lines.forEach((line, i) => flowCtx.fillText(line, x, y - ((lines.length-1)*5) + (i*10) + 4));
         }
 
         const ledPower = document.getElementById('led-power'); const ledBoost = document.getElementById('led-boost'); const textStatus = document.getElementById('text-status');
