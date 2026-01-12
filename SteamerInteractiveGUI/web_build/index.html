@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Steamer Interactive GUI (v2.2)</title>
+    <title>Steamer Interactive GUI (v2.3)</title>
     <style>
         body { margin: 0; padding: 0; background-color: #1e1e1e; font-family: 'Segoe UI', sans-serif; color: #eeeeee; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         #controls-bar { background-color: #2b2b2b; padding: 5px 20px; display: flex; justify-content: center; align-items: center; border-bottom: 1px solid #333; flex-shrink: 0; }
@@ -51,7 +51,7 @@
             <div id="guide-label">INTERACTIVE MODE: Click the buttons on the product image (Main or Side view) to operate.</div>
         </div>
         <div id="sidebar">
-            <div class="sidebar-header">State Overview</div><div class="sidebar-sub">Logic Decision Tree:</div><canvas id="flow-canvas" width="280" height="450"></canvas>
+            <div class="sidebar-header">State Overview</div><div class="sidebar-sub">Logic Decision Tree:</div><canvas id="flow-canvas"></canvas>
         </div>
     </div>
 
@@ -228,11 +228,28 @@
 
         const flowCanvas = document.getElementById('flow-canvas');
         const flowCtx = flowCanvas.getContext('2d');
+        const FLOW_W = 280; const FLOW_H = 450; 
+
+        function resizeFlowCanvas() {
+            const container = document.getElementById('sidebar');
+            const dpr = window.devicePixelRatio || 1;
+            const cw = container.clientWidth - 20; // Account for margins
+            const scale = cw / FLOW_W; 
+            
+            flowCanvas.width = cw * dpr;
+            flowCanvas.height = FLOW_H * scale * dpr;
+            flowCanvas.style.width = cw + 'px';
+            flowCanvas.style.height = (FLOW_H * scale) + 'px';
+            
+            flowCtx.setTransform(1, 0, 0, 1, 0, 0); 
+            flowCtx.scale(scale * dpr, scale * dpr);
+        }
+        window.addEventListener('resize', resizeFlowCanvas); resizeFlowCanvas();
         
         function drawFlowchart() {
-             const w = flowCanvas.width; const h = flowCanvas.height; 
-             flowCtx.clearRect(0,0,w,h); 
-             const cx = w/2;
+             const cx = FLOW_W / 2;
+             flowCtx.clearRect(0,0,FLOW_W,FLOW_H); 
+             // const cx = w/2; // Removed dynamic w calc
              const y1 = 40; const y2 = 130; const y3 = 250;
              const xNorm = 60; const xHeat = 140; const xBoost = 220;
              
