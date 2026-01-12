@@ -423,14 +423,33 @@
         // Helper updated to accept boolean 'active' override instead of tag matching logic inside
         function renderNode(x, y, text, tag, w, h, isActive) {
             const x1 = x - w/2; const y1 = y - h/2;
-            const color = isActive ? (text.includes("STEAM") || text.includes("Power Heat") || text.includes("Boost Heat") ? "#ffffff" : "#444444") : "#2b2b2b";
-            const textColor = isActive ? (color === "#ffffff" ? "#000000" : "#ffffff") : "#666666";
-            const border = isActive ? "#ffffff" : "#444444";
             
-            flowCtx.fillStyle = color; flowCtx.strokeStyle = border; flowCtx.lineWidth = 2;
+            let fill = "#2b2b2b";
+            let textCol = "#666666";
+            let border = "#444444";
+            
+            if (isActive) {
+                border = "#ffffff";
+                textCol = "#000000"; // Default active text
+                
+                if (text.includes("OFF")) {
+                    fill = "#555555";
+                    textCol = "#ffffff";
+                } else if (text.includes("STEAM")) {
+                    fill = "#00aaaa"; // Cyan
+                } else if (text.includes("Boost")) {
+                    fill = "#d18c02"; // Orange
+                } else if (text.includes("Normal") || text.includes("Power")) {
+                    fill = "#00aa00"; // Green
+                } else {
+                    fill = "#ffffff";
+                }
+            }
+            
+            flowCtx.fillStyle = fill; flowCtx.strokeStyle = border; flowCtx.lineWidth = 2;
             flowCtx.fillRect(x1, y1, w, h); flowCtx.strokeRect(x1, y1, w, h);
             
-            flowCtx.fillStyle = textColor; flowCtx.textAlign = "center"; flowCtx.textBaseline = "middle";
+            flowCtx.fillStyle = textCol; flowCtx.textAlign = "center"; flowCtx.textBaseline = "middle";
             const lines = text.split("\n");
             for(let i=0; i<lines.length; i++) flowCtx.fillText(lines[i], x, y - ((lines.length-1)*6) + (i*12));
         }
