@@ -89,16 +89,41 @@
         const imageFiles = { 'line': 'steamer.png', 'alloff': 'Renders/alloff.jpg', 'on': 'Renders/on.jpg', 'onwithsteam': 'Renders/onwithsteam.jpg', 'onwithboost': 'Renders/onwithboost.jpg', 'onboostwithsteam': 'Renders/onboostwithsteam.jpg' };
         for (const [key, src] of Object.entries(imageFiles)) { images[key] = new Image(); images[key].src = src; }
 
-        let state = { powerOn: false, mode: 1, holdActive: false, isHeating: false, heatingStartTime: 0, heatingProgress: 0.0, pulseIntensity: 0.0, viewMode: 'line' };
+        let state = { powerOn: false, mode: 1, targetMode: 1, holdActive: false, isHeating: false, heatingStartTime: 0, heatingProgress: 0.0, pulseIntensity: 0.0, viewMode: 'line' };
 
         function triggerAction(name) {
-            if (name.includes('Power')) { state.powerOn = !state.powerOn; if (state.powerOn) state.mode = 1; else { state.mode = 1; state.holdActive = false; cancelHeating(); } }
-            else if (name.includes('Boost')) { if (state.powerOn) { if (state.mode === 1) startHeating(); else state.mode = 1; } }
+            if (name.includes('Power')) { 
+                if (!state.powerOn) { 
+                    // Turn ON -> Start Heating for Normal Mode (1)
+                    state.powerOn = true; 
+                    startHeating(1); 
+                } else { 
+                    // Turn OFF
+                    state.powerOn = false; 
+                    state.mode = 1; 
+                    state.holdActive = false; 
+                    cancelHeating(); 
+                } 
+            }
+            else if (name.includes('Boost')) { 
+                if (state.powerOn) { 
+                    if (state.mode === 1) startHeating(2); // Start Heating for Boost Mode (2)
+                    else state.mode = 1; // Return to Normal immediately
+                } 
+            }
             updateControls();
         }
-        function startHeating() { state.isHeating = true; state.heatingStartTime = performance.now() / 1000; state.heatingProgress = 0.0; }
+        function startHeating(target) { 
+            state.isHeating = true; 
+            state.targetMode = target;
+            state.heatingStartTime = performance.now() / 1000; 
+            state.heatingProgress = 0.0; 
+        }
         function cancelHeating() { state.isHeating = false; }
-        function finishHeating() { state.isHeating = false; state.mode = 2; }
+        function finishHeating() { 
+            state.isHeating = false; 
+            state.mode = state.targetMode; 
+        }
         function startHold(e) { if (e) e.preventDefault(); if (state.powerOn) { state.holdActive = true; updateControls(); } }
         function stopHold(e) { state.holdActive = false; updateControls(); }
         function toggleViewMode() { state.viewMode = (state.viewMode === 'line') ? 'render' : 'line'; document.getElementById('btn-view').innerHTML = state.viewMode === 'line' ? "SWITCH TO<br>RENDERS" : "SWITCH TO<br>LINES"; }
@@ -110,7 +135,7 @@
                 if (!state.powerOn || state.holdActive) cancelHeating();
                 else {
                     const elapsed = now - state.heatingStartTime;
-                    state.heatingProgress = Math.min(1.0, elapsed / 1.0);
+                    state.heatingProgress = Math.min(1.0, elapsed / 8.0); // 8s Duration
                     if (state.heatingProgress >= 1.0) finishHeating();
                     const pulsePhase = elapsed * (Math.PI * 2);
                     state.pulseIntensity = 0.2 + (((Math.sin(pulsePhase) + 1) / 2) * 0.8);
@@ -176,12 +201,18 @@
 
             if (state.viewMode === 'line' && state.powerOn) {
                 mainCtx.globalCompositeOperation = 'screen';
-                drawGlow(mainCtx, linePoints.Power.x, linePoints.Power.y, scale, 1.0);
-                drawGlow(mainCtx, linePoints.Power_Side.x, linePoints.Power_Side.y, scale, 1.0);
-                if (state.mode === 2 || state.isHeating) {
-                    let i = state.isHeating ? state.pulseIntensity : 1.0;
-                    drawGlow(mainCtx, linePoints.Boost.x, linePoints.Boost.y, scale, i);
-                    drawGlow(mainCtx, linePoints.Boost_Side.x, linePoints.Boost_Side.y, scale, i);
+                
+                // Active Logic for Power Glow
+                let powerInt = 1.0;
+                if (state.isHeating && state.targetMode === 1) powerInt = state.pulseIntensity;
+                drawGlow(mainCtx, linePoints.Power.x, linePoints.Power.y, scale, powerInt);
+                drawGlow(mainCtx, linePoints.Power_Side.x, linePoints.Power_Side.y, scale, powerInt);
+                
+                // Active Logic for Boost Glow
+                if (state.mode === 2 || (state.isHeating && state.targetMode === 2)) {
+                    let boostInt = (state.isHeating && state.targetMode === 2) ? state.pulseIntensity : 1.0;
+                    drawGlow(mainCtx, linePoints.Boost.x, linePoints.Boost.y, scale, boostInt);
+                    drawGlow(mainCtx, linePoints.Boost_Side.x, linePoints.Boost_Side.y, scale, boostInt);
                 }
                 if (state.holdActive) {
                      const isBoost = (state.mode === 2);
@@ -224,7 +255,8 @@
              ctx.fillStyle = "#2b2b2b"; ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
              ctx.fillRect(cx - w/2, yTop, w, h); ctx.strokeRect(cx - w/2, yTop, w, h);
              ctx.fillStyle = "#ffffff"; ctx.font = "bold 16px Segoe UI"; ctx.textAlign = "center";
-             ctx.fillText("HEATING UP...", cx, yTop + 35);
+             const title = state.targetMode === 2 ? "HEATING UP (BOOST)..." : "HEATING UP...";
+             ctx.fillText(title, cx, yTop + 35);
              const barW = 250; const barH = 12; const bx = cx - barW/2; const by = yTop + 55;
              ctx.fillStyle = "#444444"; ctx.fillRect(bx, by, barW, barH);
              const fillW = barW * state.heatingProgress; ctx.fillStyle = "#ffffff"; ctx.fillRect(bx, by, fillW, barH);
@@ -275,68 +307,89 @@
              flowCtx.clearRect(0,0,FLOW_W,FLOW_H); 
              // const cx = w/2; // Removed dynamic w calc
              const y1 = 40; const y2 = 130; const y3 = 250;
-             const xNorm = 60; const xHeat = 140; const xBoost = 220;
+             const xNorm = 60; const xBoost = 220;
+             const xPHeat = 140; // Between Off and Norm (Row 1.5 logic tricky, keeping inline)
+             // Re-layout: 
+             // Row 1: OFF -> Power Heat -> Normal
+             // Row 2: Normal -> Boost Heat -> Boost
              
+             // Redefine coordinates for cleaner vertical flow
+             const ry1 = 30; // OFF
+             const ry2 = 100; // PHeat
+             const ry3 = 170; // Normal / Boost Heat / Boost
+             const ry4 = 280; // Steam
+             
+             // Row 3 (Normal / Boost)
+             const rxNorm = 70;
+             const rxBoost = 210;
+             const rxBHeat = 140;
+
              // Nodes
-             renderNode(cx, y1, "OFF", 'off', 80, 30);
-             renderNode(xNorm, y2, "ON\n(Normal)", 'normal', 80, 40);
-             renderNode(xHeat, y2, "Heating\n(wait)", 'heating', 60, 30);
-             renderNode(xBoost, y2, "ON\n(Boost)", 'boost', 80, 40);
-             renderNode(xNorm, y3, "STEAM\n(Normal)", 'steam_norm', 80, 40);
-             renderNode(xBoost, y3, "STEAM\n(Boost)", 'steam_boost', 80, 40);
+             const h = 40;
+             let offActive = !state.powerOn;
+             renderNode(cx, ry1, "OFF", offActive ? 'on' : 'off', 80, 30, offActive);
+             
+             let pHeatActive = (state.isHeating && state.targetMode === 1);
+             renderNode(cx, ry2, "Power Heat\n(8s)", pHeatActive ? 'on' : 'off', 80, 30, pHeatActive);
+             
+             let normActive = (state.powerOn && state.mode === 1 && !state.isHeating);
+             renderNode(rxNorm, ry3, "ON\n(Normal)", normActive ? 'on' : 'off', 80, h, normActive);
+             
+             let bHeatActive = (state.isHeating && state.targetMode === 2);
+             renderNode(rxBHeat, ry3, "Boost Heat\n(8s)", bHeatActive ? 'on' : 'off', 70, 30, bHeatActive);
+             
+             let boostActive = (state.powerOn && state.mode === 2 && !state.isHeating);
+             renderNode(rxBoost, ry3, "ON\n(Boost)", boostActive ? 'on' : 'off', 80, h, boostActive);
+             
+             let steamNActive = (state.mode === 1 && state.holdActive);
+             renderNode(rxNorm, ry4, "STEAM\n(Normal)", steamNActive ? 'on' : 'off', 80, h, steamNActive);
+             
+             let steamBActive = (state.mode === 2 && state.holdActive);
+             renderNode(rxBoost, ry4, "STEAM\n(Boost)", steamBActive ? 'on' : 'off', 80, h, steamBActive);
              
              flowCtx.strokeStyle = "#444444"; flowCtx.fillStyle = "#888888"; 
              flowCtx.font = "italic 10px Segoe UI"; flowCtx.textAlign = "center";
 
              // Connections
-             drawLink(cx, y1+15, xNorm, y2-20); flowCtx.fillText("Power", (cx+xNorm)/2 + 10, (y1+y2)/2);
-             drawLink(xNorm+40, y2, xHeat-30, y2);
-             drawLink(xHeat+30, y2, xBoost-40, y2);
+             // Off -> PHeat
+             drawLink(cx, ry1+15, cx, ry2-15); 
+             flowCtx.fillText("Power", cx+20, (ry1+ry2)/2);
              
-             // Return Loop (Boost -> Norm)
-             flowCtx.beginPath(); flowCtx.moveTo(xBoost, y2+20); flowCtx.lineTo(xBoost, y2+35);
-             flowCtx.lineTo(xNorm, y2+35); flowCtx.lineTo(xNorm, y2+20); flowCtx.stroke();
-             flowCtx.fillText("Boost Btn", xHeat, y2-25);
+             // PHeat -> Normal
+             // drawLink(cx, ry2+15, rxNorm, ry3-20); // Center to Left
+             flowCtx.beginPath(); flowCtx.moveTo(cx, ry2+15); flowCtx.lineTo(cx, ry3-30); flowCtx.lineTo(rxNorm, ry3-30); flowCtx.lineTo(rxNorm, ry3-20); flowCtx.stroke();
 
-             drawLink(xNorm, y2+20, xNorm, y3-20); flowCtx.fillText("Hold", xNorm-15, (y2+y3)/2);
-             drawLink(xBoost, y2+20, xBoost, y3-20); flowCtx.fillText("Hold", xBoost-15, (y2+y3)/2);
+             // Normal -> Boost Heat -> Boost
+             drawLink(rxNorm+40, ry3, rxBHeat-35, ry3);
+             drawLink(rxBHeat+35, ry3, rxBoost-40, ry3);
+             
+             // Boost Loop Back
+             flowCtx.beginPath(); flowCtx.moveTo(rxBoost, ry3+20); flowCtx.lineTo(rxBoost, ry3+35);
+             flowCtx.lineTo(rxNorm, ry3+35); flowCtx.lineTo(rxNorm, ry3+20); flowCtx.stroke();
+             flowCtx.fillText("Boost Btn", rxBHeat, ry3+45); // Label on bottom loop
+
+             // Steam
+             drawLink(rxNorm, ry3+20, rxNorm, ry4-20);
+             drawLink(rxBoost, ry3+20, rxBoost, ry4-20);
+             flowCtx.fillText("Hold", rxNorm-15, (ry3+ry4)/2);
+             flowCtx.fillText("Hold", rxBoost-15, (ry3+ry4)/2);
         }
 
         function drawLink(x1, y1, x2, y2) { flowCtx.beginPath(); flowCtx.moveTo(x1, y1); flowCtx.lineTo(x2, y2); flowCtx.stroke(); }
         
-        function renderNode(x, y, txt, tag, w, h) {
-            let active = false;
-            let fill = '#333'; let stroke = '#555'; let text = '#888';
+        // Helper updated to accept boolean 'active' override instead of tag matching logic inside
+        function renderNode(x, y, text, tag, w, h, isActive) {
+            const x1 = x - w/2; const y1 = y - h/2;
+            const color = isActive ? (text.includes("STEAM") || text.includes("Power Heat") || text.includes("Boost Heat") ? "#ffffff" : "#444444") : "#2b2b2b";
+            const textColor = isActive ? (color === "#ffffff" ? "#000000" : "#ffffff") : "#666666";
+            const border = isActive ? "#ffffff" : "#444444";
             
-            if (!state.powerOn) { 
-                if(tag === 'off') active=true; 
-            } else {
-                if (state.isHeating) { if(tag === 'heating') active = true; }
-                else {
-                    if (state.mode === 1) {
-                         if (state.holdActive && tag === 'steam_norm') active = true; 
-                         else if (!state.holdActive && tag === 'normal') active = true; 
-                    } else {
-                         if (state.holdActive && tag === 'steam_boost') active = true; 
-                         else if (!state.holdActive && tag === 'boost') active = true; 
-                    }
-                }
-            }
-
-            if (active) {
-                stroke = '#fff'; text = '#fff';
-                if (tag === 'off') fill = '#555';
-                else if (tag === 'normal') fill = '#006600';
-                else if (tag === 'boost' || tag === 'heating') fill = '#885500';
-                else if (tag.includes('steam')) fill = '#006666';
-            }
-
-            flowCtx.fillStyle = fill; flowCtx.strokeStyle = stroke; flowCtx.lineWidth = active ? 2 : 1;
-            flowCtx.beginPath(); flowCtx.rect(x - w/2, y - h/2, w, h); flowCtx.fill(); flowCtx.stroke();
+            flowCtx.fillStyle = color; flowCtx.strokeStyle = border; flowCtx.lineWidth = 2;
+            flowCtx.fillRect(x1, y1, w, h); flowCtx.strokeRect(x1, y1, w, h);
             
-            flowCtx.fillStyle = text; flowCtx.font = active ? "bold 10px Segoe UI" : "10px Segoe UI"; flowCtx.textAlign = "center";
-            const lines = txt.split('\n');
-            lines.forEach((line, i) => flowCtx.fillText(line, x, y - ((lines.length-1)*5) + (i*10) + 4));
+            flowCtx.fillStyle = textColor; flowCtx.textAlign = "center"; flowCtx.textBaseline = "middle";
+            const lines = text.split("\n");
+            for(let i=0; i<lines.length; i++) flowCtx.fillText(lines[i], x, y - ((lines.length-1)*6) + (i*12));
         }
 
         const ledPower = document.getElementById('led-power'); const ledBoost = document.getElementById('led-boost'); const textStatus = document.getElementById('text-status');
