@@ -344,22 +344,37 @@
                              if (state.heatingDuration > 8.0) {
                                  const elapsed = (performance.now()/1000) - state.heatingStartTime;
                                  if (elapsed < 8.0) {
-                                     // Phase 1: Power Heat (Green Pulse Only)
-                                     bgImage = images.alloff;
-                                     overlayImage = images.on;
-                                     overlayOpacity = pulseVal;
-                                 } else {
-                                     // Phase 2: Boost Heat (Both Pulse)
-                                     // User req: "both pulse when turned on together... from off render to full boost"
-                                     // Prevents "left to right" strobing effect.
+                                     // Phase 1: Power Up Phase (Both Pulse from Off)
                                      bgImage = images.alloff;
                                      overlayImage = images.onwithboost;
                                      overlayOpacity = pulseVal;
+                                 } else {
+                                     // Phase 2: Boost Heat Phase
+                                     // Complex composite to ensure smooth transition from "Pulse" to "Solid" for Power LED.
+                                     // 1. Hide DOM Overlay (we will draw it manually)
+                                     bgImage = images.alloff; // Keep base dark
+                                     overlayImage = null; 
+                                     
+                                     // 2. Draw 'on' (Solid Power) fading in over 0.5s
+                                     let fade = (elapsed - 8.0) / 0.5;
+                                     if (fade > 1.0) fade = 1.0;
+                                     
+                                     if (fade > 0) {
+                                         mainCtx.globalAlpha = fade;
+                                         mainCtx.drawImage(images.on, 0, 0, mainCanvas.width, mainCanvas.height);
+                                     }
+                                     
+                                     // 3. Draw Pulsing Overlay (Both LEDs) matches Phase 1
+                                     mainCtx.globalAlpha = pulseVal;
+                                     mainCtx.drawImage(images.onwithboost, 0, 0, mainCanvas.width, mainCanvas.height);
+                                     
+                                     mainCtx.globalAlpha = 1.0; // Reset
                                  }
                              } else {
                                  // Regular Boost Heat (from Steady)
-                                 // User req: Both pulse uniformly.
-                                 bgImage = images.alloff;
+                                 // "Once boost is finished [Power Up finished] it should go from on to on with boost pulsing"
+                                 // Base=ON (Green Solid), Overlay=ON+BOOST (Orange Pulse)
+                                 bgImage = images.on;
                                  overlayImage = images.onwithboost;
                                  overlayOpacity = pulseVal; 
                              }
@@ -412,11 +427,20 @@
             } else {
                 bgImgElement.style.filter = 'none';
             }
-
+            
             const scale = mainCanvas.width / originalWidth;
 
+            // Render View: Just Steam
+            if (state.viewMode === 'render' && state.holdActive) {
+                // Steam Cloud in Render Mode
+                mainCtx.globalCompositeOperation = 'screen'; 
+                const isBoost = (state.mode === 2);
+                drawSteamCloud(mainCtx, linePoints.Steam.x * scale, linePoints.Steam.y * scale, "white", isBoost, scale);
+                mainCtx.globalCompositeOperation = 'source-over';
+            }
+
             if (state.viewMode === 'line' && state.powerOn) {
-                // Line View Logic (Unchanged)
+                // Line View Logic (Glows for Line Mode Only)
                 mainCtx.globalCompositeOperation = 'screen';
                 
                 // Active Logic for Power Glow
