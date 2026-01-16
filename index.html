@@ -24,9 +24,9 @@
         #interaction-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; touch-action: none; cursor: pointer; z-index: 3; }
         #guide-label { margin-top: 10px; color: #666666; font-size: 13px; font-weight: bold; text-align: center; position: absolute; bottom: 10px; width: 100%; pointer-events: none; z-index: 4; }
         #sidebar { width: 300px; background-color: #1a1a1a; display: flex; flex-direction: column; border-left: none; flex-shrink: 0; overflow-y: auto; }
-        .sidebar-header { color: white; font-size: 16px; font-weight: bold; padding: 20px 10px 0 10px; background-color: #1a1a1a; }
-        .sidebar-sub { color: #666666; font-size: 12px; padding: 5px 10px 10px 10px; }
-        #flow-canvas { width: 280px; height: 450px; margin: 0 10px; }
+        .sidebar-header { color: white; font-size: 16px; font-weight: bold; padding: 10px 10px 0 10px; background-color: #1a1a1a; }
+        .sidebar-sub { color: #666666; font-size: 12px; padding: 5px 10px 5px 10px; }
+        #flow-canvas { width: 280px; height: 300px; margin: 0 10px; }
         @media (max-width: 768px) { #main-content { flex-direction: column; } #sidebar { width: 100%; height: 300px; border-top: 1px solid #333; } #flow-canvas { width: 100%; } #controls-bar { flex-wrap: wrap; } .separator { display: none; } .control-group { margin-bottom: 10px; } }
         #login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: #1e1e1e; z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         #login-box { background-color: #252526; padding: 30px; border: 1px solid #333; border-radius: 5px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
@@ -70,9 +70,9 @@
         <div id="sidebar">
             <div class="sidebar-header">State Overview</div><div class="sidebar-sub">Logic Decision Tree:</div><canvas id="flow-canvas"></canvas>
             
-            <div class="sidebar-header" style="border-top: 1px solid #333; margin-top: 10px;">LED Pulse Behaviour</div>
+            <div class="sidebar-header" style="border-top: 1px solid #333; margin-top: 0;">LED Pulse Behaviour</div>
             <div class="sidebar-sub">Adjust pulse animation</div>
-            <div style="padding: 0 15px 20px 15px;">
+            <div style="padding: 0 15px 10px 15px;">
                 <!-- Frequency -->
                 <div style="display:flex; justify-content:space-between; color:#888; font-size:11px; margin-bottom:5px;">
                     <span>Frequency</span><span id="val-freq">0.6 Hz</span>
@@ -96,6 +96,10 @@
                     <span>Dwell (Pause)</span><span id="val-dwell">0%</span>
                 </div>
                 <input type="range" id="param-dwell" min="0" max="90" step="5" value="0" style="width:100%" oninput="updateParams()">
+
+                <!-- Graph -->
+                <div style="color:#888; font-size:11px; margin-top:20px; margin-bottom:5px;">Pulse Preview (Full Cycle)</div>
+                <canvas id="pulse-graph" width="270" height="100" style="background-color:#222; border:1px solid #333; width:100%;"></canvas>
             </div>
         </div>
     </div>
@@ -142,6 +146,79 @@
             document.getElementById('val-min').textContent = pulseParams.min.toFixed(2);
             document.getElementById('val-max').textContent = pulseParams.max.toFixed(2);
             document.getElementById('val-dwell').textContent = pulseParams.dwell + "%";
+            
+            drawPulseGraph();
+        }
+
+        function drawPulseGraph() {
+            const canvas = document.getElementById('pulse-graph');
+            if(!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            ctx.clearRect(0, 0, w, h);
+            
+            // Draw Background Grid (Subtle)
+            ctx.strokeStyle = "#333"; ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, h * (1 - pulseParams.min)); ctx.lineTo(w, h * (1 - pulseParams.min)); // Min line
+            ctx.moveTo(0, h * (1 - pulseParams.max)); ctx.lineTo(w, h * (1 - pulseParams.max)); // Max line
+            ctx.stroke();
+
+            // Total Duration (X-Axis) = state.heatingDuration (default 8s if not heating) or 8s baseline?
+            // User request: "full range of time to be the time it takes for the loading bar"
+            // We use state.heatingDuration. If strictly 0 (not started), maybe default to 8.0?
+            let totalDuration = state.heatingDuration || 8.0; 
+            
+            ctx.strokeStyle = "#FFA500";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            const freq = pulseParams.freq;
+            const dwellFrac = pulseParams.dwell / 100.0;
+            const activeTime = 1.0 - dwellFrac;
+            const riseTime = activeTime / 2;
+            
+            // Plot points across canvas width
+            for (let x = 0; x <= w; x++) {
+                // Map x to time
+                const t = (x / w) * totalDuration;
+                
+                // Calculate Pulse (Logic copied from loop)
+                const cyclePos = t * freq;
+                const p = cyclePos - Math.floor(cyclePos);
+                
+                let normalized = 0.0;
+                
+                if (p < riseTime) {
+                    const prog = p / riseTime;
+                    const angle = -Math.PI / 2 + (prog * Math.PI);
+                    normalized = (Math.sin(angle) + 1) / 2;
+                } else if (p < riseTime + dwellFrac) {
+                    normalized = 1.0;
+                } else {
+                    const activeP = p - (riseTime + dwellFrac);
+                    const prog = activeP / riseTime; 
+                    // Note: In loop, calculation was:
+                    // const prog = (p - (riseTime + dwellFrac)) / riseTime;
+                    // const angle = Math.PI / 2 + (prog * Math.PI);
+                    // This resulted in sine fall. Replicating exactly:
+                    const angle = Math.PI / 2 + (prog * Math.PI);
+                    normalized = (Math.sin(angle) + 1) / 2;
+                }
+
+                const intensity = pulseParams.min + (normalized * (pulseParams.max - pulseParams.min));
+                // If min > max, clamp to max (safety from loop)
+                const val = (pulseParams.min > pulseParams.max) ? pulseParams.max : intensity;
+                
+                // Map intensity (0..1) to Y (h..0)
+                const y = h - (val * h); 
+                
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
         }
 
         function triggerAction(name) {
@@ -308,6 +385,8 @@
             // Note: bgImgElement sizes automatically to wrapper 100%
         }
         window.addEventListener('resize', resizeMainCanvas); resizeMainCanvas();
+        // Initial drawing of graph
+        setTimeout(drawPulseGraph, 100);
 
         let currentBgSrc = "";
         let currentOverlaySrc = "";
@@ -350,33 +429,71 @@
                                      overlayOpacity = pulseVal;
                                  } else {
                                      // Phase 2: Boost Heat Phase
-                                     // Complex composite to ensure smooth transition from "Pulse" to "Solid" for Power LED.
-                                     // 1. Hide DOM Overlay (we will draw it manually)
-                                     bgImage = images.alloff; // Keep base dark
-                                     overlayImage = null; 
+                                     // Requirement: Power (Top Button) = Solid Green. Boost (Bottom Button) = Pulsing Orange.
+                                     // Solution: Set Base to 'on' (Solid Green).
+                                     // Manually draw 'onwithboost' (Pulse) but CLIPPED to the Boost button area.
                                      
-                                     // 2. Draw 'on' (Solid Power) fading in over 0.5s
-                                     let fade = (elapsed - 8.0) / 0.5;
-                                     if (fade > 1.0) fade = 1.0;
+                                     bgImage = images.on; // Base (Solid Green)
+                                     overlayImage = null; // Disable CSS Overlay
                                      
-                                     if (fade > 0) {
-                                         mainCtx.globalAlpha = fade;
-                                         mainCtx.drawImage(images.on, 0, 0, mainCanvas.width, mainCanvas.height);
+                                     // Manual Canvas Drawing
+                                     // Clip to Boost Buttons (Main + Side)
+                                     mainCtx.save();
+                                     mainCtx.beginPath();
+                                     
+                                     // Boost Main (Approx Radius 100 to cover glow)
+                                     const s = mainCanvas.width / originalWidth;
+
+                                     if (renderPoints && renderPoints.Boost) {
+                                         // Boost Main
+                                         const p1 = renderPoints.Boost;
+                                         mainCtx.arc(p1.x * s, p1.y * s, 120 * s, 0, Math.PI * 2);
+                                         mainCtx.closePath();
+                                         
+                                         // Boost Side
+                                         const p2 = renderPoints.Boost_Side;
+                                         if (p2) {
+                                             mainCtx.arc(p2.x * s, p2.y * s, 100 * s, 0, Math.PI * 2);
+                                             mainCtx.closePath();
+                                         }
                                      }
                                      
-                                     // 3. Draw Pulsing Overlay (Both LEDs) matches Phase 1
-                                     mainCtx.globalAlpha = pulseVal;
-                                     mainCtx.drawImage(images.onwithboost, 0, 0, mainCanvas.width, mainCanvas.height);
+                                     mainCtx.clip();
                                      
-                                     mainCtx.globalAlpha = 1.0; // Reset
+                                     // Draw the Overlay Image (Pulsing)
+                                     mainCtx.globalAlpha = pulseVal;
+                                     const w = mainCanvas.width;
+                                     const h = mainCanvas.height;
+                                     mainCtx.drawImage(images.onwithboost, 0, 0, w, h);
+                                     
+                                     mainCtx.restore();
                                  }
                              } else {
                                  // Regular Boost Heat (from Steady)
-                                 // "Once boost is finished [Power Up finished] it should go from on to on with boost pulsing"
-                                 // Base=ON (Green Solid), Overlay=ON+BOOST (Orange Pulse)
-                                 bgImage = images.on;
-                                 overlayImage = images.onwithboost;
-                                 overlayOpacity = pulseVal; 
+                                 // Same Logic: Power (Solid), Boost (Pulse). Use Clipping.
+                                  bgImage = images.on;
+                                  overlayImage = null;
+                                  
+                                  mainCtx.save();
+                                  mainCtx.beginPath();
+                                  
+                                  const s = mainCanvas.width / originalWidth;
+
+                                  if (renderPoints && renderPoints.Boost) {
+                                      const p1 = renderPoints.Boost;
+                                      mainCtx.arc(p1.x * s, p1.y * s, 120 * s, 0, Math.PI * 2);
+                                      mainCtx.closePath();
+                                      const p2 = renderPoints.Boost_Side;
+                                      if (p2) {
+                                          mainCtx.arc(p2.x * s, p2.y * s, 100 * s, 0, Math.PI * 2);
+                                          mainCtx.closePath();
+                                      }
+                                  }
+                                  mainCtx.clip();
+                                  
+                                  mainCtx.globalAlpha = pulseVal;
+                                  mainCtx.drawImage(images.onwithboost, 0, 0, mainCanvas.width, mainCanvas.height);
+                                  mainCtx.restore();
                              }
                         } else {
                              // Power Heating: Base=OFF, Overlay=ON
@@ -427,20 +544,11 @@
             } else {
                 bgImgElement.style.filter = 'none';
             }
-            
+
             const scale = mainCanvas.width / originalWidth;
 
-            // Render View: Just Steam
-            if (state.viewMode === 'render' && state.holdActive) {
-                // Steam Cloud in Render Mode
-                mainCtx.globalCompositeOperation = 'screen'; 
-                const isBoost = (state.mode === 2);
-                drawSteamCloud(mainCtx, linePoints.Steam.x * scale, linePoints.Steam.y * scale, "white", isBoost, scale);
-                mainCtx.globalCompositeOperation = 'source-over';
-            }
-
             if (state.viewMode === 'line' && state.powerOn) {
-                // Line View Logic (Glows for Line Mode Only)
+                // Line View Logic (Unchanged)
                 mainCtx.globalCompositeOperation = 'screen';
                 
                 // Active Logic for Power Glow
@@ -587,7 +695,7 @@
 
         const flowCanvas = document.getElementById('flow-canvas');
         const flowCtx = flowCanvas.getContext('2d');
-        const FLOW_W = 340; const FLOW_H = 450; 
+        const FLOW_W = 340; const FLOW_H = 300; 
 
         function resizeFlowCanvas() {
             const container = document.getElementById('sidebar');
@@ -620,7 +728,7 @@
              const ry1 = 30; // OFF
              const ry2 = 100; // PHeat
              const ry3 = 170; // Normal / Boost Heat / Boost
-             const ry4 = 280; // Steam
+             const ry4 = 240; // Steam
              
              // Row 3 (Normal / Boost)
              const rxNorm = 70;
