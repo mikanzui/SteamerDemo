@@ -129,7 +129,7 @@
         const imageFiles = { 'line': 'steamer.png', 'alloff': 'Renders/alloff.jpg', 'on': 'Renders/on.jpg', 'onwithsteam': 'Renders/onwithsteam.jpg', 'onwithboost': 'Renders/onwithboost.jpg', 'onboostwithsteam': 'Renders/onboostwithsteam.jpg' };
         for (const [key, src] of Object.entries(imageFiles)) { images[key] = new Image(); images[key].src = src; }
 
-        let state = { powerOn: false, mode: 1, targetMode: 1, holdActive: false, isHeating: false, heatingStartTime: 0, heatingProgress: 0.0, pulseIntensity: 0.0, pulseStartTime: 0, viewMode: 'line' };
+        let state = { powerOn: false, mode: 1, targetMode: 1, holdActive: false, isHeating: false, heatingStartTime: 0, heatingDuration: 8.0, heatingProgress: 0.0, pulseIntensity: 0.0, pulseStartTime: 0, viewMode: 'line' };
         let pulseParams = { freq: 0.6, min: 0.1, max: 1.0, dwell: 0 };
 
         function updateParams() {
@@ -149,7 +149,7 @@
                 if (!state.powerOn) { 
                     // Turn ON -> Start Heating for Normal Mode (1)
                     state.powerOn = true; 
-                    startHeating(1); 
+                    startHeating(1, 8.0); 
                 } else { 
                     // Turn OFF
                     state.powerOn = false; 
@@ -160,15 +160,48 @@
             }
             else if (name.includes('Boost')) { 
                 if (state.powerOn) { 
-                    if (state.mode === 1) startHeating(2); // Start Heating for Boost Mode (2)
-                    else state.mode = 1; // Return to Normal immediately
+                    if (state.mode === 1) {
+                         if (state.isHeating) {
+                             // Handle toggling during heating
+                             if (state.targetMode === 1) {
+                                 // Currently Powering Up -> Add Boost
+                                 state.targetMode = 2;
+                                 state.heatingDuration = 16.0;
+                             } else if (state.targetMode === 2) {
+                                 // Currently Heating to Boost -> Cancel Boost
+                                 if (state.heatingDuration > 8.0) {
+                                     // Sequential Mode (16s)
+                                     const el = (performance.now()/1000) - state.heatingStartTime;
+                                     if (el < 8.0) {
+                                         // Still in Power Phase -> Revert to simple Power Up
+                                         state.targetMode = 1;
+                                         state.heatingDuration = 8.0;
+                                     } else {
+                                         // Already in Boost Phase -> Stop and stay Normal
+                                         cancelHeating();
+                                         state.mode = 1; 
+                                     }
+                                 } else {
+                                     // Standard Heating (8s) -> Cancel
+                                     cancelHeating();
+                                     state.mode = 1; 
+                                 }
+                             }
+                         } else {
+                             // Steady State Normal -> Start Heating to Boost
+                             startHeating(2, 8.0); 
+                         }
+                    } else {
+                        state.mode = 1; // Return to Normal immediately
+                    }
                 } 
             }
             updateControls();
         }
-        function startHeating(target) { 
+        function startHeating(target, duration) { 
             state.isHeating = true; 
             state.targetMode = target;
+            state.heatingDuration = duration;
             state.heatingStartTime = performance.now() / 1000; 
             // Sync pulse start time if we are starting a fresh heating cycle
             // This ensures the sine wave always starts at the correct phase
@@ -181,7 +214,14 @@
             state.mode = state.targetMode; 
             updateControls();
         }
-        function startHold(e) { if (e) e.preventDefault(); if (state.powerOn) { state.holdActive = true; updateControls(); } }
+        function startHold(e) { 
+            if (e) e.preventDefault(); 
+            // Block steam during initial Power On heating (targetMode 1)
+            // Allow steam during Boost heating (targetMode 2)
+            if (state.isHeating && state.targetMode === 1) return;
+
+            if (state.powerOn) { state.holdActive = true; updateControls(); } 
+        }
         function stopHold(e) { state.holdActive = false; updateControls(); }
         function toggleViewMode() { state.viewMode = (state.viewMode === 'line') ? 'render' : 'line'; document.getElementById('btn-view').innerHTML = state.viewMode === 'line' ? "SWITCH TO<br>RENDERS" : "SWITCH TO<br>LINES"; }
 
@@ -197,15 +237,14 @@
                     cancelHeating();
                 } else {
                     const elapsed = now - state.heatingStartTime;
-                    state.heatingProgress = Math.min(1.0, elapsed / 8.0); // 8s Duration
+                    state.heatingProgress = Math.min(1.0, elapsed / state.heatingDuration); 
                     if (state.heatingProgress >= 1.0) finishHeating();
                 }
             }
 
             // 2. Handle Pulse Logic
-            // Apply when: Heating OR (Boost Mode AND Not Holding Steam)
-            const isBoostMode = (state.mode === 2);
-            const shouldPulse = state.isHeating || (state.powerOn && isBoostMode && !state.holdActive);
+            // Apply when: Heating Only (Reverted "Steady Boost Pulse")
+            const shouldPulse = state.isHeating;
 
             if (shouldPulse) {
                 // If we are in Boost Mode Steady (not heating), and we don't have a valid pulseStartTime,
@@ -300,10 +339,30 @@
                             overlayImage = null;
                         } 
                         else if (state.targetMode === 2) {
-                             // Boost Heating: Base=ON, Overlay=ON+BOOST
-                             bgImage = images.on;
-                             overlayImage = images.onwithboost;
-                             overlayOpacity = pulseVal; 
+                             // Boost Heating
+                             // Logic: If extended power up (16s), check phase
+                             if (state.heatingDuration > 8.0) {
+                                 const elapsed = (performance.now()/1000) - state.heatingStartTime;
+                                 if (elapsed < 8.0) {
+                                     // Phase 1: Power Heat (Green Pulse Only)
+                                     bgImage = images.alloff;
+                                     overlayImage = images.on;
+                                     overlayOpacity = pulseVal;
+                                 } else {
+                                     // Phase 2: Boost Heat (Green Solid, Orange Pulse)
+                                     // Base=ON. Overlay=OnWithBoost.
+                                     // Pulse affects Difference (Orange). Green stays solid.
+                                     bgImage = images.on;
+                                     overlayImage = images.onwithboost;
+                                     overlayOpacity = pulseVal;
+                                 }
+                             } else {
+                                 // Regular Boost Heat (from Steady)
+                                 // Base=ON, Overlay=ON+BOOST
+                                 bgImage = images.on;
+                                 overlayImage = images.onwithboost;
+                                 overlayOpacity = pulseVal; 
+                             }
                         } else {
                              // Power Heating: Base=OFF, Overlay=ON
                              bgImage = images.alloff;
@@ -316,11 +375,8 @@
                             if (state.holdActive) {
                                 bgImage = images.onboostwithsteam;
                             } else {
-                                // PULSING BOOST STEADY STATE
-                                // Base = ON, Overlay = ON+BOOST
-                                bgImage = images.on;
-                                overlayImage = images.onwithboost;
-                                overlayOpacity = state.pulseIntensity;
+                                // REVERT: Steady Boost = Solid ON+BOOST
+                                bgImage = images.onwithboost;
                             }
                         } else {
                             bgImage = state.holdActive ? images.onwithsteam : images.on;
@@ -365,16 +421,27 @@
                 
                 // Active Logic for Power Glow
                 let powerInt = 1.0;
-                if (state.isHeating && state.targetMode === 1) powerInt = state.pulseIntensity;
+                // If Heating Normal (Target 1) -> Pulse
+                // If Heating Boost from Cold (Target 2, Duration 16):
+                //    - Elapsed < 8: Pulse
+                //    - Elapsed >= 8: Solid (1.0)
+                if (state.isHeating) {
+                    if (state.targetMode === 1) powerInt = state.pulseIntensity;
+                    else if (state.heatingDuration > 8.0) {
+                        const el = (performance.now()/1000) - state.heatingStartTime;
+                        if (el < 8.0) powerInt = state.pulseIntensity;
+                        else powerInt = 1.0;
+                    }
+                }
                 drawGlow(mainCtx, linePoints.Power.x, linePoints.Power.y, scale, powerInt);
                 drawGlow(mainCtx, linePoints.Power_Side.x, linePoints.Power_Side.y, scale, powerInt);
                 
                 // Active Logic for Boost Glow
                 if (state.mode === 2 || (state.isHeating && state.targetMode === 2)) {
-                    // Logic: Pulse if Heating or Steady Boost (not holding steam)
+                    // Logic: Pulse only during Boost Heating. Solid for Steady Boost.
                     let boostInt = 1.0;
                     if (state.isHeating && state.targetMode === 2) boostInt = state.pulseIntensity;
-                    else if (state.mode === 2 && !state.holdActive) boostInt = state.pulseIntensity;
+                    else if (state.mode === 2) boostInt = 1.0; 
                     
                     drawGlow(mainCtx, linePoints.Boost.x, linePoints.Boost.y, scale, boostInt);
                     drawGlow(mainCtx, linePoints.Boost_Side.x, linePoints.Boost_Side.y, scale, boostInt);
@@ -385,7 +452,7 @@
                 }
                 mainCtx.globalCompositeOperation = 'source-over';
             }
-            if (state.isHeating && !state.holdActive) drawHeatingOverlay(mainCtx, scale);
+            if (state.isHeating) drawHeatingOverlay(mainCtx, scale);
         }
 
         function drawGlow(ctx, x, y, scale, intensity) {
@@ -416,18 +483,65 @@
         }
 
         function drawHeatingOverlay(ctx, scale) {
-             const cx = ctx.canvas.width / 2; const yTop = 10; const w = 300; const h = 100;
+             const cx = ctx.canvas.width / 2; const yTop = 10; 
+             const w = 300; 
+             // Height depends on mode
+             const isLongHeat = (state.heatingDuration > 8.0);
+             const h = isLongHeat ? 140 : 100;
+             
              ctx.fillStyle = "#2b2b2b"; ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
              ctx.fillRect(cx - w/2, yTop, w, h); ctx.strokeRect(cx - w/2, yTop, w, h);
              ctx.fillStyle = "#ffffff"; ctx.font = "bold 16px Segoe UI"; ctx.textAlign = "center";
-             const title = state.targetMode === 2 ? "HEATING UP (BOOST)..." : "HEATING UP...";
+             const title = "HEATING UP...";
              ctx.fillText(title, cx, yTop + 35);
-             const barW = 250; const barH = 12; const bx = cx - barW/2; const by = yTop + 55;
-             ctx.fillStyle = "#444444"; ctx.fillRect(bx, by, barW, barH);
-             const fillW = barW * state.heatingProgress; ctx.fillStyle = "#ffffff"; ctx.fillRect(bx, by, fillW, barH);
-             ctx.fillStyle = "#aaaaaa"; ctx.font = "12px Segoe UI";
-             const percent = Math.floor(state.heatingProgress * 100);
-             ctx.fillText(percent + "%", cx, by + 25);
+             
+             const barW = 250; const barH = 12; const bx = cx - barW/2; 
+             
+             if (isLongHeat) {
+                 // 16s Heating (Power then Boost)
+                 // Use elapsed time relative to start
+                 const elapsed = (performance.now() / 1000) - state.heatingStartTime;
+                 
+                 // Bar 1: Power (0-8s)
+                 const p1 = Math.min(1.0, elapsed / 8.0);
+                 const by1 = yTop + 55;
+                 ctx.fillStyle = "#444444"; ctx.fillRect(bx, by1, barW, barH);
+                 if (p1 > 0) { ctx.fillStyle = "#ffffff"; ctx.fillRect(bx, by1, barW * p1, barH); }
+                 
+                 // Label 1
+                 ctx.fillStyle = "#aaaaaa"; ctx.font = "12px Segoe UI";
+                 ctx.fillText("POWER: " + Math.floor(p1 * 100) + "%", cx, by1 + 25);
+                 
+                 // Bar 2: Boost (8-16s)
+                 const p2 = Math.max(0.0, Math.min(1.0, (elapsed - 8.0) / 8.0));
+                 const by2 = by1 + 40;
+                 ctx.fillStyle = "#444444"; ctx.fillRect(bx, by2, barW, barH);
+                 if (p2 > 0) { ctx.fillStyle = "#FFA500"; ctx.fillRect(bx, by2, barW * p2, barH); }
+                 
+                 // Label 2
+                 ctx.fillText("BOOST: " + Math.floor(p2 * 100) + "%", cx, by2 + 25);
+                 
+             } else {
+                 // Standard 8s Limit
+                 const by = yTop + 55;
+                 ctx.fillStyle = "#444444"; ctx.fillRect(bx, by, barW, barH);
+                 
+                 let fillColor = "#ffffff";
+                 let labelPrefix = "POWER: ";
+
+                 if (state.targetMode === 2) {
+                     fillColor = "#FFA500";
+                     labelPrefix = "BOOST: ";
+                 }
+
+                 const fillW = barW * state.heatingProgress; 
+                 ctx.fillStyle = fillColor; 
+                 ctx.fillRect(bx, by, fillW, barH);
+                 
+                 ctx.fillStyle = "#aaaaaa"; ctx.font = "12px Segoe UI";
+                 const percent = Math.floor(state.heatingProgress * 100);
+                 ctx.fillText(labelPrefix + percent + "%", cx, by + 25);
+             }
         }
 
         function handleInput(x, y) {
@@ -580,7 +694,17 @@
         function updateControls() {
             // Power LED (Green #00ff00)
             if (state.powerOn) {
-                if (state.isHeating && state.targetMode === 1) {
+                // Determine if pulsing
+                let pulsing = false;
+                if (state.isHeating) {
+                    if (state.targetMode === 1) pulsing = true;
+                    else if (state.targetMode === 2 && state.heatingDuration > 8.0) {
+                        const el = (performance.now()/1000) - state.heatingStartTime;
+                        if (el < 8.0) pulsing = true;
+                    }
+                }
+                
+                if (pulsing) {
                     // Pulse Green
                     const v = Math.floor(state.pulseIntensity * 255);
                     ledPower.style.backgroundColor = `rgb(0, ${v}, 0)`;
@@ -593,17 +717,25 @@
 
             // Boost LED (Orange #FFA500)
             if (state.powerOn) {
-                // Pulse if Heating (Target Boost) OR if Mode is Boost (Steady)
-                let pulsing = (state.isHeating && state.targetMode === 2) || (state.mode === 2 && !state.holdActive);
+                // BUG FIX: Reverted "Steady Pulse" behavior.
+                // Only pulse if actively Heating to boost.
+                let pulsing = false;
+                if (state.isHeating && state.targetMode === 2) {
+                     pulsing = true;
+                     // Handle Sequential Logic (16s)
+                     if (state.heatingDuration > 8.0) {
+                         const el = (performance.now()/1000) - state.heatingStartTime;
+                         if (el < 8.0) pulsing = false; // Still in Power Phase
+                     }
+                }
                 
                 if (pulsing) {
                     // Pulse Orange
-                    // Use pulseIntensity. If we are in steady boost, pulseIntensity will be valid because we updated loop()
                     const v = Math.floor(state.pulseIntensity * 255);
                     const g = Math.floor(v * 0.65); // Maintain orange ratio
                     ledBoost.style.backgroundColor = `rgb(${v}, ${g}, 0)`;
                 } else if (state.mode === 2) {
-                    // Hold Active case? Solid Orange.
+                    // Solid Orange for Steady Boost
                     ledBoost.style.backgroundColor = '#FFA500';
                 } else {
                     ledBoost.style.backgroundColor = '#3a3a3a';
