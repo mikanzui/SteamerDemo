@@ -394,20 +394,21 @@ class SteamerGUI:
             # Render Mode: Select pre-rendered image based on state
             tag = "alloff"
             if self.power_on:
-                if self.mode == 2: # Boost
-                    if self.is_heating:
-                        # FLASHING LOGIC (Render Mode)
-                        # Alternate between Boost frame and Normal frame based on pulse
-                        # Threshold > 0.6 creates a blinking effect
-                        if self.pulse_intensity > 0.6:
-                            tag = "onwithboost"
-                        else:
-                            tag = "on"
-                    elif self.hold_active:
+                if self.is_heating:
+                    # Heating Logic (Render Mode)
+                    threshold = 0.5
+                    if self.target_mode == 2:
+                        # Boost Heating: Toggle Boost (ON <-> ON+BOOST)
+                        tag = "onwithboost" if self.pulse_intensity > threshold else "on"
+                    else:
+                        # Power Heating: Toggle Power (OFF <-> ON)
+                        tag = "on" if self.pulse_intensity > threshold else "alloff"
+                elif self.mode == 2: # Boost Stable
+                    if self.hold_active:
                         tag = "onboostwithsteam"
                     else:
-                        tag = "onwithboost" # Covers active boost
-                else: # Normal
+                        tag = "onwithboost"
+                else: # Normal Stable
                     if self.hold_active:
                         tag = "onwithsteam"
                     else:
@@ -486,7 +487,7 @@ class SteamerGUI:
         self.flow_canvas.delete("all")
         
         # --- Config ---
-        cx = 190 # Center of canvas (panel width 380)
+        cx = 170 # Updated Center for 340 width
         
         # Styles
         box_style = {"fill": "#333333", "outline": "#555555", "width": 1}
@@ -511,26 +512,27 @@ class SteamerGUI:
             self.flow_canvas.create_text(x, y, text=txt, fill="#888888", font=("Segoe UI", 7, "italic"))
 
         # --- Re-Layout ---
-        # Row 1: OFF
-        _, _, _, b_off_y2, off_x, off_y = draw_box(cx, 30, 80, 30, "OFF", "off")
+        # Same values as Web Version
+        ry1 = 40; ry2 = 140; ry3 = 260; ry4 = 430
         
-        # Row 2: Power Heat (Vertical flow)
-        _, b_pheat_y1, _, b_pheat_y2, pheat_x, pheat_y = draw_box(cx, 80, 80, 30, "Power Heat\n(8s)", "p_heat")
+        # OFF
+        _, _, _, b_off_y2, off_x, off_y = draw_box(cx, ry1, 80, 40, "OFF", "off")
+        
+        # Power Heat
+        _, b_pheat_y1, _, b_pheat_y2, pheat_x, pheat_y = draw_box(cx, ry2, 80, 40, "Power Heat\n(8s)", "p_heat")
         
         # Row 3: Normal / Boost Loop
-        row3_y = 170
-        norm_x = 70
-        boost_x = 290
-        bheat_x = 180
+        rxNorm = 60
+        rxBHeat = 170
+        rxBoost = 280
         
-        _, b_norm_y1, _, b_norm_y2, _, _ = draw_box(norm_x, row3_y, 80, 40, "ON\n(Normal)", "normal")
-        _, b_bheat_y1, _, b_bheat_y2, _, _ = draw_box(bheat_x, row3_y, 70, 30, "Boost Heat\n(8s)", "b_heat")
-        _, b_boost_y1, _, b_boost_y2, _, _ = draw_box(boost_x, row3_y, 80, 40, "ON\n(Boost)", "boost")
+        _, b_norm_y1, _, b_norm_y2, _, _ = draw_box(rxNorm, ry3, 80, 50, "ON\n(Normal)", "normal")
+        _, b_bheat_y1, _, b_bheat_y2, _, _ = draw_box(rxBHeat, ry3, 70, 40, "Boost Heat\n(8s)", "b_heat")
+        _, b_boost_y1, _, b_boost_y2, _, _ = draw_box(rxBoost, ry3, 80, 50, "ON\n(Boost)", "boost")
 
         # Row 4: Steam
-        row4_y = 280
-        draw_box(norm_x, row4_y, 80, 40, "STEAM\n(Normal)", "steam_norm")
-        draw_box(boost_x, row4_y, 80, 40, "STEAM\n(Boost)", "steam_boost")
+        draw_box(rxNorm, ry4, 80, 50, "STEAM\n(Normal)", "steam_norm")
+        draw_box(rxBoost, ry4, 80, 50, "STEAM\n(Boost)", "steam_boost")
 
         # --- Connections ---
         
@@ -539,20 +541,19 @@ class SteamerGUI:
         label_line(cx + 25, (b_off_y2+b_pheat_y1)/2, "Power")
         
         # Power Heat -> Normal 
-        # (Center to Left)
-        self.flow_canvas.create_line(cx, b_pheat_y2, cx, row3_y-30, norm_x, row3_y-30, norm_x, b_norm_y1, **arrow_opts)
+        self.flow_canvas.create_line(cx, b_pheat_y2, cx, ry3-40, rxNorm, ry3-40, rxNorm, b_norm_y1, **arrow_opts)
 
         # Normal <-> Boost Heat <-> Boost
-        draw_line(norm_x+40, row3_y, bheat_x-35, row3_y)
-        draw_line(bheat_x+35, row3_y, boost_x-40, row3_y)
+        draw_line(rxNorm+40, ry3, rxBHeat-35, ry3)
+        draw_line(rxBHeat+35, ry3, rxBoost-40, ry3)
         
         # Back loop
-        self.flow_canvas.create_line(boost_x, b_boost_y2+5, boost_x, row3_y+35, norm_x, row3_y+35, norm_x, b_norm_y2+5, **arrow_opts)
-        label_line(bheat_x, row3_y+40, "Boost Btn")
+        self.flow_canvas.create_line(rxBoost, b_boost_y2+5, rxBoost, ry3+50, rxNorm, ry3+50, rxNorm, b_norm_y2+5, **arrow_opts)
+        label_line(rxBHeat, ry3+60, "Boost Btn")
         
         # Steam
-        draw_line(norm_x, b_norm_y2, norm_x, row4_y-20) 
-        draw_line(boost_x, b_boost_y2, boost_x, row4_y-20)
+        draw_line(rxNorm, b_norm_y2, rxNorm, ry4-25) 
+        draw_line(rxBoost, b_boost_y2, rxBoost, ry4-25)
 
     # -----------------
     # State Logic
@@ -710,7 +711,7 @@ class SteamerGUI:
         cw = self.canvas.winfo_width()
         ch = self.canvas.winfo_height()
         cx = cw // 2
-        y_top = 40
+        y_top = 10
         w, h = 300, 100
         x1, y1 = cx - w//2, y_top
         x2, y2 = cx + w//2, y_top + h
