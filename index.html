@@ -32,6 +32,16 @@
         #login-box { background-color: #252526; padding: 30px; border: 1px solid #333; border-radius: 5px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
         #login-input { padding: 8px; margin: 10px 0; background-color: #333; border: 1px solid #555; color: white; border-radius: 3px; outline: none; }
         #login-btn { background-color: #007acc; color: white; border: none; padding: 8px 15px; cursor: pointer; border-radius: 3px; font-weight: bold; }
+        
+        /* Slider Styling (Orange) */
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]:focus { outline: none; }
+        /* Webkit (Chrome/Edge/Safari) */
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #FFA500; cursor: pointer; margin-top: -6px; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #555555; border-radius: 2px; }
+        /* Firefox */
+        input[type=range]::-moz-range-thumb { height: 16px; width: 16px; border: none; border-radius: 50%; background: #FFA500; cursor: pointer; }
+        input[type=range]::-moz-range-track { width: 100%; height: 4px; cursor: pointer; background: #555555; border-radius: 2px; }
     </style>
 </head>
 <body>
@@ -59,6 +69,34 @@
         </div>
         <div id="sidebar">
             <div class="sidebar-header">State Overview</div><div class="sidebar-sub">Logic Decision Tree:</div><canvas id="flow-canvas"></canvas>
+            
+            <div class="sidebar-header" style="border-top: 1px solid #333; margin-top: 10px;">LED Pulse Behaviour</div>
+            <div class="sidebar-sub">Adjust pulse animation</div>
+            <div style="padding: 0 15px 20px 15px;">
+                <!-- Frequency -->
+                <div style="display:flex; justify-content:space-between; color:#888; font-size:11px; margin-bottom:5px;">
+                    <span>Frequency</span><span id="val-freq">0.6 Hz</span>
+                </div>
+                <input type="range" id="param-freq" min="0.1" max="3.0" step="0.1" value="0.6" style="width:100%" oninput="updateParams()">
+                
+                <!-- Min Intensity -->
+                <div style="display:flex; justify-content:space-between; color:#888; font-size:11px; margin-top:15px; margin-bottom:5px;">
+                    <span>Min Intensity</span><span id="val-min">0.10</span>
+                </div>
+                <input type="range" id="param-min" min="0.0" max="1.0" step="0.05" value="0.1" style="width:100%" oninput="updateParams()">
+                
+                <!-- Max Intensity -->
+                <div style="display:flex; justify-content:space-between; color:#888; font-size:11px; margin-top:15px; margin-bottom:5px;">
+                    <span>Max Intensity</span><span id="val-max">1.00</span>
+                </div>
+                <input type="range" id="param-max" min="0.0" max="1.0" step="0.05" value="1.0" style="width:100%" oninput="updateParams()">
+
+                <!-- Dwell -->
+                <div style="display:flex; justify-content:space-between; color:#888; font-size:11px; margin-top:15px; margin-bottom:5px;">
+                    <span>Dwell (Pause)</span><span id="val-dwell">0%</span>
+                </div>
+                <input type="range" id="param-dwell" min="0" max="90" step="5" value="0" style="width:100%" oninput="updateParams()">
+            </div>
         </div>
     </div>
 
@@ -91,7 +129,20 @@
         const imageFiles = { 'line': 'steamer.png', 'alloff': 'Renders/alloff.jpg', 'on': 'Renders/on.jpg', 'onwithsteam': 'Renders/onwithsteam.jpg', 'onwithboost': 'Renders/onwithboost.jpg', 'onboostwithsteam': 'Renders/onboostwithsteam.jpg' };
         for (const [key, src] of Object.entries(imageFiles)) { images[key] = new Image(); images[key].src = src; }
 
-        let state = { powerOn: false, mode: 1, targetMode: 1, holdActive: false, isHeating: false, heatingStartTime: 0, heatingProgress: 0.0, pulseIntensity: 0.0, viewMode: 'line' };
+        let state = { powerOn: false, mode: 1, targetMode: 1, holdActive: false, isHeating: false, heatingStartTime: 0, heatingProgress: 0.0, pulseIntensity: 0.0, pulseStartTime: 0, viewMode: 'line' };
+        let pulseParams = { freq: 0.6, min: 0.1, max: 1.0, dwell: 0 };
+
+        function updateParams() {
+            pulseParams.freq = parseFloat(document.getElementById('param-freq').value);
+            pulseParams.min = parseFloat(document.getElementById('param-min').value);
+            pulseParams.max = parseFloat(document.getElementById('param-max').value);
+            pulseParams.dwell = parseInt(document.getElementById('param-dwell').value);
+            
+            document.getElementById('val-freq').textContent = pulseParams.freq.toFixed(1) + " Hz";
+            document.getElementById('val-min').textContent = pulseParams.min.toFixed(2);
+            document.getElementById('val-max').textContent = pulseParams.max.toFixed(2);
+            document.getElementById('val-dwell').textContent = pulseParams.dwell + "%";
+        }
 
         function triggerAction(name) {
             if (name.includes('Power')) { 
@@ -119,6 +170,9 @@
             state.isHeating = true; 
             state.targetMode = target;
             state.heatingStartTime = performance.now() / 1000; 
+            // Sync pulse start time if we are starting a fresh heating cycle
+            // This ensures the sine wave always starts at the correct phase
+            state.pulseStartTime = state.heatingStartTime;
             state.heatingProgress = 0.0; 
         }
         function cancelHeating() { state.isHeating = false; updateControls(); }
@@ -134,17 +188,61 @@
         function startLoop() { requestAnimationFrame(loop); }
         function loop(timestamp) {
             const now = timestamp / 1000;
+            
+            // 1. Handle Heating Logic
             if (state.isHeating) {
-                if (!state.powerOn || state.holdActive) cancelHeating();
-                else {
+                // Update: Do not cancel heating if holding steam (state.holdActive)
+                // Only cancel if power is turned off
+                if (!state.powerOn) {
+                    cancelHeating();
+                } else {
                     const elapsed = now - state.heatingStartTime;
                     state.heatingProgress = Math.min(1.0, elapsed / 8.0); // 8s Duration
                     if (state.heatingProgress >= 1.0) finishHeating();
-                    const pulsePhase = elapsed * (Math.PI * 2);
-                    state.pulseIntensity = 0.2 + (((Math.sin(pulsePhase) + 1) / 2) * 0.8);
                 }
-            } else state.pulseIntensity = 0.0;
-            updateControls(); // Sync UI every frame for animations
+            }
+
+            // 2. Handle Pulse Logic
+            // Apply when: Heating OR (Boost Mode AND Not Holding Steam)
+            const isBoostMode = (state.mode === 2);
+            const shouldPulse = state.isHeating || (state.powerOn && isBoostMode && !state.holdActive);
+
+            if (shouldPulse) {
+                // If we are in Boost Mode Steady (not heating), and we don't have a valid pulseStartTime,
+                // we should probably sync it. But ideally it carries over from heating.
+                if (state.pulseStartTime === 0) state.pulseStartTime = now;
+
+                const elapsed = now - state.pulseStartTime;
+                const freq = pulseParams.freq;
+                const t = elapsed * freq; 
+                const p = t - Math.floor(t); 
+                
+                const dwellFrac = pulseParams.dwell / 100.0;
+                const activeTime = 1.0 - dwellFrac;
+                const riseTime = activeTime / 2;
+                
+                let normalized = 0.0;
+                
+                if (p < riseTime) {
+                    const prog = p / riseTime;
+                    const angle = -Math.PI / 2 + (prog * Math.PI);
+                    normalized = (Math.sin(angle) + 1) / 2;
+                } else if (p < riseTime + dwellFrac) {
+                    normalized = 1.0;
+                } else {
+                    const prog = (p - (riseTime + dwellFrac)) / riseTime;
+                    const angle = Math.PI / 2 + (prog * Math.PI);
+                    normalized = (Math.sin(angle) + 1) / 2;
+                }
+                
+                state.pulseIntensity = pulseParams.min + (normalized * (pulseParams.max - pulseParams.min));
+                if (pulseParams.min > pulseParams.max) state.pulseIntensity = pulseParams.max;
+            } else {
+                state.pulseIntensity = 0.0;
+                // state.pulseStartTime = 0; // Don't reset, allows pausing phase? No, continuous is better.
+            }
+
+            updateControls(); 
             drawMain(); drawFlowchart(); requestAnimationFrame(loop);
         }
 
@@ -186,26 +284,44 @@
                 if (state.powerOn) {
                     if (state.isHeating) {
                         // Heating: Pulse Effect
-                        // Make sine wave 0 -> 1 for opacity
-                        const normalizedPulse = (Math.sin(performance.now() / 1000 * Math.PI * 2) + 1) / 2; // Simple 0-1 Sine
+                        // Use calculated intensity (0.0 - 1.0)
+                        const pulseVal = state.pulseIntensity; 
                         
-                        // NOTE: state.pulseIntensity in loop was slightly different formula, using simple one here for smooth visual
-                        
-                        if (state.targetMode === 2) {
+                        // Handle STEAM during heating
+                        if (state.holdActive) {
+                            // If holding steam while heating, show the steam for the CURRENT mode.
+                            // e.g. If heating to Boost (Mode 1->2), show Mode 1 steam (smaller).
+                            if (state.mode === 2) {
+                                bgImage = images.onboostwithsteam;
+                            } else {
+                                bgImage = images.onwithsteam;
+                            }
+                            // Disable overlay to ensure steam is visible (full renders are opaque)
+                            overlayImage = null;
+                        } 
+                        else if (state.targetMode === 2) {
                              // Boost Heating: Base=ON, Overlay=ON+BOOST
                              bgImage = images.on;
                              overlayImage = images.onwithboost;
-                             overlayOpacity = normalizedPulse; // Fade in orange boost
+                             overlayOpacity = pulseVal; 
                         } else {
                              // Power Heating: Base=OFF, Overlay=ON
                              bgImage = images.alloff;
                              overlayImage = images.on;
-                             overlayOpacity = normalizedPulse; // Fade in green power
+                             overlayOpacity = pulseVal; 
                         }
                     } else {
                         // Steady State
                         if (state.mode === 2) {
-                            bgImage = state.holdActive ? images.onboostwithsteam : images.onwithboost;
+                            if (state.holdActive) {
+                                bgImage = images.onboostwithsteam;
+                            } else {
+                                // PULSING BOOST STEADY STATE
+                                // Base = ON, Overlay = ON+BOOST
+                                bgImage = images.on;
+                                overlayImage = images.onwithboost;
+                                overlayOpacity = state.pulseIntensity;
+                            }
                         } else {
                             bgImage = state.holdActive ? images.onwithsteam : images.on;
                         }
@@ -255,7 +371,11 @@
                 
                 // Active Logic for Boost Glow
                 if (state.mode === 2 || (state.isHeating && state.targetMode === 2)) {
-                    let boostInt = (state.isHeating && state.targetMode === 2) ? state.pulseIntensity : 1.0;
+                    // Logic: Pulse if Heating or Steady Boost (not holding steam)
+                    let boostInt = 1.0;
+                    if (state.isHeating && state.targetMode === 2) boostInt = state.pulseIntensity;
+                    else if (state.mode === 2 && !state.holdActive) boostInt = state.pulseIntensity;
+                    
                     drawGlow(mainCtx, linePoints.Boost.x, linePoints.Boost.y, scale, boostInt);
                     drawGlow(mainCtx, linePoints.Boost_Side.x, linePoints.Boost_Side.y, scale, boostInt);
                 }
@@ -473,12 +593,17 @@
 
             // Boost LED (Orange #FFA500)
             if (state.powerOn) {
-                if (state.isHeating && state.targetMode === 2) {
+                // Pulse if Heating (Target Boost) OR if Mode is Boost (Steady)
+                let pulsing = (state.isHeating && state.targetMode === 2) || (state.mode === 2 && !state.holdActive);
+                
+                if (pulsing) {
                     // Pulse Orange
+                    // Use pulseIntensity. If we are in steady boost, pulseIntensity will be valid because we updated loop()
                     const v = Math.floor(state.pulseIntensity * 255);
                     const g = Math.floor(v * 0.65); // Maintain orange ratio
                     ledBoost.style.backgroundColor = `rgb(${v}, ${g}, 0)`;
                 } else if (state.mode === 2) {
+                    // Hold Active case? Solid Orange.
                     ledBoost.style.backgroundColor = '#FFA500';
                 } else {
                     ledBoost.style.backgroundColor = '#3a3a3a';
