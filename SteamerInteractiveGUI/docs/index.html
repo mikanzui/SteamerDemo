@@ -452,8 +452,10 @@
                             if (state.holdActive) {
                                 bgImage = images.onboostwithsteam;
                             } else {
-                                // REVERT: Steady Boost = Solid ON+BOOST
-                                bgImage = images.onwithboost;
+                                // Composite rendering for Steady Boost to ensure alignment is consistent with Pulse
+                                bgImage = images.on;
+                                overlayImage = images.onwithboost;
+                                overlayOpacity = 1.0;
                             }
                         } else {
                             bgImage = state.holdActive ? images.onwithsteam : images.on;
@@ -479,6 +481,29 @@
             // 2. Draw Overlay Layer
             if (overlayImage) {
                 mainCtx.save();
+                
+                // MASKING FIX: Mask the overlay to the button area for Boost.
+                // This prevents "shifting" or "swimming" artifacts caused by slight misalignment 
+                // between the Base Body render and the Boost Body render.
+                const isBoostOverlay = (overlayImage === images.onwithboost);
+                if (state.viewMode === 'render' && isBoostOverlay) {
+                    mainCtx.beginPath();
+                    const s = mainCanvas.width / originalWidth;
+                    
+                    // Main Boost Button (Back View)
+                    if (renderPoints.Boost) {
+                        mainCtx.moveTo(renderPoints.Boost.x * s + (120 * s), renderPoints.Boost.y * s);
+                        mainCtx.arc(renderPoints.Boost.x * s, renderPoints.Boost.y * s, 120 * s, 0, Math.PI * 2);
+                    }
+                    
+                    // Side Boost Button (Side View)
+                    if (renderPoints.Boost_Side) {
+                         mainCtx.moveTo(renderPoints.Boost_Side.x * s + (100 * s), renderPoints.Boost_Side.y * s);
+                         mainCtx.arc(renderPoints.Boost_Side.x * s, renderPoints.Boost_Side.y * s, 100 * s, 0, Math.PI * 2);
+                    }
+                    mainCtx.clip();
+                }
+
                 mainCtx.globalAlpha = overlayOpacity;
                 mainCtx.drawImage(overlayImage, 0, 0, mainCanvas.width, mainCanvas.height);
                 mainCtx.restore();
@@ -693,13 +718,21 @@
              let offActive = !state.powerOn;
              renderNode(cx, ry1, "OFF", offActive ? 'on' : 'off', 80, 30, offActive);
              
-             let pHeatActive = (state.isHeating && state.targetMode === 1);
+             // Sequential Logic Calculation
+             const now = performance.now() / 1000;
+             const elapsed = state.isHeating ? (now - state.heatingStartTime) : 0;
+             const isSequential = (state.isHeating && state.targetMode === 2 && state.heatingDuration > 8.0);
+             const inFirstPhase = (isSequential && elapsed < 8.0);
+
+             // Power Heat Active: Target 1 OR (Sequential AND First Phase)
+             let pHeatActive = (state.isHeating && state.targetMode === 1) || inFirstPhase;
              renderNode(cx, ry2, "Power Heat", pHeatActive ? 'on' : 'off', 80, 30, pHeatActive);
              
              let normActive = (state.powerOn && state.mode === 1 && !state.isHeating);
              renderNode(rxNorm, ry3, "ON\n(Normal)", normActive ? 'on' : 'off', 80, h, normActive);
              
-             let bHeatActive = (state.isHeating && state.targetMode === 2);
+             // Boost Heat Active: Target 2 AND NOT First Phase
+             let bHeatActive = (state.isHeating && state.targetMode === 2 && !inFirstPhase);
              renderNode(rxBHeat, ry3, "Boost Heat", bHeatActive ? 'on' : 'off', 70, 30, bHeatActive);
              
              let boostActive = (state.powerOn && state.mode === 2 && !state.isHeating);
